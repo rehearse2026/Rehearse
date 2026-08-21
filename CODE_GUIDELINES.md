@@ -2,6 +2,11 @@
 
 Reference this file for all changes to the Rehearse codebase.
 
+## Repository
+
+- Canonical GitHub remote: https://github.com/rehearse2026/Rehearse
+- Push to that `origin` by default. Do not use `Atharva309/Rehearse` unless explicitly asked.
+
 ## Folder structure (core)
 
 ```
