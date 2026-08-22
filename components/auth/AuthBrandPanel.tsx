@@ -27,10 +27,10 @@ export function AuthBrandPanel({
             src={backgroundSrc}
             alt=""
             aria-hidden
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover brightness-[0.65] saturate-[0.85]"
           />
           <div
-            className="absolute inset-0 bg-primary-container/80"
+            className="absolute inset-0 bg-primary-container/85"
             aria-hidden
           />
         </>
@@ -55,10 +55,10 @@ export function AuthBrandPanel({
       </div>
 
       <div className="relative z-10 mb-24">
-        <h2 className="text-on-primary font-semibold text-3xl leading-10 tracking-[-0.02em] mb-3">
+        <h2 className="text-white font-semibold text-3xl leading-10 tracking-[-0.02em] mb-3">
           {headline}
         </h2>
-        <p className="text-primary-fixed-dim text-lg leading-7">{subtext}</p>
+        <p className="text-white/85 text-lg leading-7">{subtext}</p>
       </div>
 
       <div className="relative z-10">
