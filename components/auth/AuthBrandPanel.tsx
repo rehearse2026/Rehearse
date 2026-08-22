@@ -27,10 +27,10 @@ export function AuthBrandPanel({
             src={backgroundSrc}
             alt=""
             aria-hidden
-            className="absolute inset-0 h-full w-full object-cover brightness-[0.65] saturate-[0.85]"
+            className="absolute inset-0 h-full w-full object-cover brightness-[0.82] saturate-[0.92]"
           />
           <div
-            className="absolute inset-0 bg-primary-container/85"
+            className="absolute inset-0 bg-primary-container/80"
             aria-hidden
           />
         </>
