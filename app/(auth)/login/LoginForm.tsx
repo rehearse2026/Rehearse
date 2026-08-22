@@ -116,7 +116,7 @@ export function LoginForm(): React.ReactElement {
       </button>
       <p className="text-sm text-text-secondary text-center">
         No account?{" "}
-        <Link href="/register" className="text-accent font-medium hover:underline">
+        <Link href="/signup?role=professor" className="text-accent font-medium hover:underline">
           Register
         </Link>
       </p>

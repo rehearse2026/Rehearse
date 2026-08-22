@@ -114,6 +114,7 @@ export const VOICE_ONLY_STAGES = ["prospecting", "close"] as const;
 export const PUBLIC_ROUTES = [
   "/login",
   "/register",
+  "/signup",
   "/student-login",
   "/student-register",
   "/join",

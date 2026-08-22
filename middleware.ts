@@ -3,7 +3,7 @@
  * Route protection for professors (Supabase auth)
  * and students (JWT cookie session).
  *
- * Public routes: /login, /student-login, /student-register, /join/*
+ * Public routes: /login, /register, /signup, /student-login, /student-register, /join/*
  * Professor routes: /teacher/* → requires Supabase session
  * Student routes: /student/* → requires student_session cookie
  */
@@ -101,7 +101,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (user && (pathname === "/login" || pathname === "/register")) {
+      if (
+        user &&
+        (pathname === "/login" || pathname === "/register" || pathname === "/signup")
+      ) {
         const { data: profile } = await supabase
           .from("profiles")
           .select("role")
@@ -119,5 +122,5 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  matcher: ["/teacher/:path*", "/student/:path*", "/login", "/register"],
+  matcher: ["/teacher/:path*", "/student/:path*", "/login", "/register", "/signup"],
 };

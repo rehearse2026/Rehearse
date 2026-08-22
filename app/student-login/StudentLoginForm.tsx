@@ -74,8 +74,8 @@ export function StudentLoginForm(): React.ReactElement {
 
       <p className="text-sm text-text-secondary text-center">
         New student?{" "}
-        <Link href="/join" className="text-accent font-medium hover:underline">
-          Use your professor&apos;s link to register
+        <Link href="/signup?role=student" className="text-accent font-medium hover:underline">
+          Create an account
         </Link>
       </p>
       <p className="text-sm text-text-secondary text-center">
