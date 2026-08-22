@@ -50,11 +50,10 @@ export default async function RegisterPage(): Promise<React.ReactElement> {
 
       <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-4 lg:p-8 bg-surface-container-lowest">
         <div className="lg:hidden w-full max-w-sm mb-8 text-center">
-          <img
-            src="/pitchlab-logo-new.png"
-            alt="Rehearse"
-            className="h-7 w-auto mx-auto mb-3"
-          />
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <img src="/pitchlab-logo-new.png" alt="" className="h-7 w-auto" />
+            <span className="text-secondary font-semibold text-xl tracking-tight">Rehearse</span>
+          </div>
           <p className="text-sm text-on-surface-variant">Set up your class</p>
         </div>
 

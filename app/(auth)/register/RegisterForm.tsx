@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AuthRoleToggle } from "@/components/auth/AuthRoleToggle";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -45,6 +46,11 @@ export function RegisterForm(): React.ReactElement {
 
   return (
     <div className="w-full max-w-sm">
+      <AuthRoleToggle
+        active="professor"
+        hrefs={{ student: "/student-register", professor: "/register" }}
+      />
+
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6" autoComplete="off">
         <div className="space-y-1">
           <label
@@ -116,12 +122,13 @@ export function RegisterForm(): React.ReactElement {
         </button>
       </form>
 
-      <div className="mt-6 text-center">
+      <div className="mt-6 text-center text-sm text-on-surface-variant">
+        Already have an account?{" "}
         <Link
           href="/login?role=professor"
-          className="text-sm text-on-surface-variant hover:text-primary transition-colors"
+          className="font-medium text-secondary hover:text-on-secondary-container transition-colors"
         >
-          Already have an account? Sign in
+          Sign in
         </Link>
       </div>
     </div>

@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AuthRoleToggle } from "@/components/auth/AuthRoleToggle";
 import {
   JOIN_CODE_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -66,8 +67,19 @@ export function StudentRegisterForm({
     router.refresh();
   };
 
+  const professorHref = "/register";
+  const studentHref =
+    joinCode.trim().length > 0
+      ? `/student-register?code=${encodeURIComponent(joinCode.trim().toUpperCase())}`
+      : "/student-register";
+
   return (
     <div className="w-full max-w-[440px] flex flex-col gap-8">
+      <AuthRoleToggle
+        active="student"
+        hrefs={{ student: studentHref, professor: professorHref }}
+      />
+
       <form
         onSubmit={(e) => void handleSubmit(e)}
         className="flex flex-col gap-6"
@@ -159,12 +171,13 @@ export function StudentRegisterForm({
         </button>
       </form>
 
-      <div className="text-center">
+      <div className="text-center text-sm text-on-surface-variant">
+        Already have an account?{" "}
         <Link
           href="/login?role=student"
-          className="text-[13px] font-medium text-secondary hover:underline"
+          className="font-medium text-secondary hover:underline"
         >
-          Already have an account? Sign in
+          Sign in
         </Link>
       </div>
     </div>

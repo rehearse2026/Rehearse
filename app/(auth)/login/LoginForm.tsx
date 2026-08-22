@@ -221,16 +221,14 @@ export function LoginForm({ initialRole = "student" }: LoginFormProps): React.Re
         </div>
       </form>
 
-      <div className="mt-6 text-center">
-        <p className="text-sm text-on-surface-variant">
-          Don&apos;t have an account?{" "}
-          <Link
-            href={signupHref}
-            className="text-secondary font-medium hover:text-on-secondary-container transition-colors"
-          >
-            Sign up
-          </Link>
-        </p>
+      <div className="mt-6 text-center text-sm text-on-surface-variant">
+        Don&apos;t have an account?{" "}
+        <Link
+          href={signupHref}
+          className="font-medium text-secondary hover:text-on-secondary-container transition-colors"
+        >
+          Sign up
+        </Link>
       </div>
     </div>
   );
