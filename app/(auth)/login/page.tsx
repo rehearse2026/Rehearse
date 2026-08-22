@@ -1,24 +1,47 @@
 /**
  * login/page.tsx
- * Stitch split-screen login page shell — professor Supabase auth only.
+ * Unified Student / Professor sign-in — AuthBrandPanel + role-toggle form.
  */
 
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import Link from "next/link";
-import { AuthSplitLayout } from "@/components/ui/AuthSplitLayout";
+import { AuthBrandPanel } from "@/components/auth/AuthBrandPanel";
+import { getStudentSession } from "@/lib/student-session";
 import { createClient } from "@/lib/supabase/server";
-import { LoginForm } from "./LoginForm";
+import { LoginForm, type LoginRole } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
 
+export const metadata: Metadata = {
+  title: "Sign In — Rehearse",
+};
+
+type PageProps = {
+  searchParams: { role?: string; redirect?: string };
+};
+
 /**
- * Login page — redirects authenticated professors to dashboard; otherwise shows form.
+ * Resolves initial toggle role from ?role= (defaults to student).
  */
-export default async function LoginPage(): Promise<React.ReactElement> {
+function resolveInitialRole(roleParam: string | undefined): LoginRole {
+  const normalized = roleParam?.trim().toLowerCase() ?? "";
+  return normalized === "professor" ? "professor" : "student";
+}
+
+/**
+ * Login page — redirects already-authenticated users; otherwise shows unified form.
+ */
+export default async function LoginPage({
+  searchParams,
+}: PageProps): Promise<React.ReactElement> {
+  const studentSession = await getStudentSession();
+  if (studentSession) {
+    redirect("/student/dashboard");
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
   if (url && key) {
     const supabase = createClient();
     const {
@@ -38,20 +61,30 @@ export default async function LoginPage(): Promise<React.ReactElement> {
     }
   }
 
+  const initialRole = resolveInitialRole(searchParams.role);
+
   return (
-    <AuthSplitLayout accent="accent" subtitle="Sign in to continue your sales training.">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Professor Sign In</p>
-      <h2 className="text-2xl font-bold text-primary mt-2">Welcome back</h2>
-      <p className="text-sm text-text-secondary mt-1">Sign in to your Rehearse account</p>
-      <Suspense fallback={<p className="mt-8 text-sm text-text-secondary">Loading…</p>}>
-        <LoginForm />
-      </Suspense>
-      <p className="mt-6 text-sm text-text-secondary text-center">
-        Students — use the link provided by your professor or{" "}
-        <Link href="/student-login" className="text-accent font-medium hover:underline">
-          Student Login →
-        </Link>
-      </p>
-    </AuthSplitLayout>
+    <div className="bg-surface h-screen w-full flex m-0 p-0 overflow-hidden text-on-surface">
+      <AuthBrandPanel headline="Welcome back" subtext="Sign in to continue" />
+
+      <div className="w-full lg:w-1/2 bg-surface-container-lowest flex items-center justify-center p-4 lg:p-8 relative">
+        <div className="lg:hidden absolute top-0 left-0 w-full p-4 flex justify-center border-b border-outline-variant bg-surface-container-lowest z-10">
+          <img src="/pitchlab-logo-new.png" alt="Rehearse" className="h-7 w-auto" />
+        </div>
+
+        <div className="w-full max-w-[400px] mt-16 lg:mt-0">
+          <div className="text-center mb-8 lg:hidden">
+            <h2 className="text-on-surface font-semibold text-2xl leading-8 mb-1">
+              Welcome back
+            </h2>
+            <p className="text-on-surface-variant text-sm">Sign in to continue</p>
+          </div>
+
+          <Suspense fallback={<p className="text-sm text-on-surface-variant">Loading…</p>}>
+            <LoginForm initialRole={initialRole} />
+          </Suspense>
+        </div>
+      </div>
+    </div>
   );
 }

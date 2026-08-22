@@ -1,54 +1,27 @@
 /**
  * signup/page.tsx
- * Unified Student / Professor account creation — replaces /register and
- * /student-register. Optional ?role= and ?code= query params.
+ * Redirect shim — legacy /signup URLs forward to the correct dedicated signup page.
  */
 
-import type { Metadata } from "next";
-import { AuthSplitLayout } from "@/components/ui/AuthSplitLayout";
-import { SignupForm, type SignupRole } from "./SignupForm";
-
-export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "Create Account — Rehearse",
-};
+import { redirect } from "next/navigation";
 
 type PageProps = {
   searchParams: { role?: string; code?: string };
 };
 
 /**
- * Resolves initial role from query: code presence biases to student;
- * explicit ?role= wins when valid.
+ * ?role=student → /student-register (preserves ?code=); otherwise → /register.
  */
-function resolveInitialRole(searchParams: PageProps["searchParams"]): SignupRole | null {
-  const code = searchParams.code?.trim() ?? "";
-  const roleParam = searchParams.role?.trim().toLowerCase() ?? "";
+export default function SignupPage({ searchParams }: PageProps): never {
+  const role = searchParams.role?.trim().toLowerCase() ?? "";
+  const code = searchParams.code?.trim().toUpperCase() ?? "";
 
-  if (roleParam === "student" || roleParam === "professor") {
-    return roleParam;
+  if (role === "student") {
+    if (code.length > 0) {
+      redirect(`/student-register?code=${encodeURIComponent(code)}`);
+    }
+    redirect("/student-register");
   }
-  if (code.length > 0) {
-    return "student";
-  }
-  return null;
-}
 
-/**
- * Signup page shell — AuthSplitLayout + SignupForm.
- */
-export default function SignupPage({ searchParams }: PageProps): React.ReactElement {
-  const initialJoinCode = searchParams.code?.trim().toUpperCase() ?? "";
-  const initialRole = resolveInitialRole(searchParams);
-
-  return (
-    <AuthSplitLayout accent="gold" subtitle="Create your account and start practicing.">
-      <h2 className="text-2xl font-bold text-primary">Create account</h2>
-      <p className="text-sm text-text-secondary mt-1">
-        Sign up as a student or professor
-      </p>
-      <SignupForm initialRole={initialRole} initialJoinCode={initialJoinCode} />
-    </AuthSplitLayout>
-  );
+  redirect("/register");
 }
