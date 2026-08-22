@@ -1,47 +1,24 @@
 /**
  * AuthRoleToggle.tsx
- * Student / Professor segmented control for auth pages.
+ * Student / Professor segmented control — same slider animation as /login.
  */
 
 "use client";
 
-import { useRouter } from "next/navigation";
-
 export type AuthRole = "student" | "professor";
 
 type AuthRoleToggleProps = {
-  /** Currently selected role. */
   active: AuthRole;
-  /**
-   * When set, switching roles navigates to these hrefs instead of calling onChange.
-   * Used on separate signup pages so each route owns its form.
-   */
-  hrefs?: { student: string; professor: string };
-  /** Local role change (used on unified /login). */
-  onChange?: (role: AuthRole) => void;
+  onChange: (role: AuthRole) => void;
 };
 
 /**
- * Segmented Student/Professor toggle matching the login Stitch control.
+ * In-place segmented toggle; keeps the slider mounted so the slide animates smoothly.
  */
 export function AuthRoleToggle({
   active,
-  hrefs,
   onChange,
 }: AuthRoleToggleProps): React.ReactElement {
-  const router = useRouter();
-
-  const select = (role: AuthRole): void => {
-    if (role === active) {
-      return;
-    }
-    if (hrefs) {
-      router.push(hrefs[role]);
-      return;
-    }
-    onChange?.(role);
-  };
-
   return (
     <div className="mb-6">
       <div className="relative flex bg-surface-container-low rounded-lg p-1">
@@ -53,7 +30,7 @@ export function AuthRoleToggle({
         />
         <button
           type="button"
-          onClick={() => select("student")}
+          onClick={() => onChange("student")}
           className={`relative z-10 flex-1 py-2 text-center text-sm rounded-md transition-colors ${
             active === "student"
               ? "font-semibold text-primary-container"
@@ -64,7 +41,7 @@ export function AuthRoleToggle({
         </button>
         <button
           type="button"
-          onClick={() => select("professor")}
+          onClick={() => onChange("professor")}
           className={`relative z-10 flex-1 py-2 text-center text-sm rounded-md transition-colors ${
             active === "professor"
               ? "font-semibold text-primary-container"

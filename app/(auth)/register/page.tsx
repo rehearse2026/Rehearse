@@ -1,22 +1,21 @@
 /**
  * register/page.tsx
- * Professor signup — AuthBrandPanel + RegisterForm (teacher-only Supabase Auth).
+ * Professor signup entry — renders unified SignupExperience (professor default).
  */
 
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { AuthBrandPanel } from "@/components/auth/AuthBrandPanel";
+import { SignupExperience } from "@/components/auth/SignupExperience";
 import { createClient } from "@/lib/supabase/server";
-import { RegisterForm } from "./RegisterForm";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Professor Signup — Rehearse",
+  title: "Create Account — Rehearse",
 };
 
 /**
- * Professor registration page — redirects authenticated teachers to dashboard.
+ * Professor registration URL — authenticated teachers go to the dashboard.
  */
 export default async function RegisterPage(): Promise<React.ReactElement> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -41,24 +40,5 @@ export default async function RegisterPage(): Promise<React.ReactElement> {
     }
   }
 
-  return (
-    <div className="bg-background min-h-screen flex text-on-surface antialiased">
-      <AuthBrandPanel
-        headline="Set up your class"
-        subtext="Create a professor account to get started."
-      />
-
-      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-4 lg:p-8 bg-surface-container-lowest">
-        <div className="lg:hidden w-full max-w-sm mb-8 text-center">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <img src="/pitchlab-logo-new.png" alt="" className="h-7 w-auto" />
-            <span className="text-secondary font-semibold text-xl tracking-tight">Rehearse</span>
-          </div>
-          <p className="text-sm text-on-surface-variant">Set up your class</p>
-        </div>
-
-        <RegisterForm />
-      </div>
-    </div>
-  );
+  return <SignupExperience initialRole="professor" />;
 }

@@ -70,7 +70,7 @@ export default async function LoginPage({
       <div className="w-full lg:w-1/2 bg-surface-container-lowest flex items-center justify-center p-4 lg:p-8 relative">
         <div className="lg:hidden absolute top-0 left-0 w-full p-4 flex justify-center items-center gap-2 border-b border-outline-variant bg-surface-container-lowest z-10">
           <img src="/pitchlab-logo-new.png" alt="" className="h-7 w-auto" />
-          <span className="text-secondary font-semibold text-xl tracking-tight">Rehearse</span>
+          <span className="text-primary font-semibold text-xl tracking-tight">Rehearse</span>
         </div>
 
         <div className="w-full max-w-[400px] mt-16 lg:mt-0">

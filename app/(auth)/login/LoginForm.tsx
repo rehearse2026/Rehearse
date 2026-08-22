@@ -9,9 +9,10 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AuthRoleToggle, type AuthRole } from "@/components/auth/AuthRoleToggle";
 import { createClient } from "@/lib/supabase/client";
 
-export type LoginRole = "student" | "professor";
+export type LoginRole = AuthRole;
 
 type LoginFormProps = {
   initialRole?: LoginRole;
@@ -127,48 +128,15 @@ export function LoginForm({ initialRole = "student" }: LoginFormProps): React.Re
 
   return (
     <div className="w-full">
-      <div className="mb-6">
-        <div className="relative flex bg-surface-container-low rounded-lg p-1">
-          <span
-            aria-hidden
-            className={`absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-md bg-white shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-              role === "professor" ? "translate-x-full" : "translate-x-0"
-            }`}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setRole("student");
-              setError("");
-              setIdentifier("");
-              setPassword("");
-            }}
-            className={`relative z-10 flex-1 py-2 text-center text-sm rounded-md transition-colors ${
-              role === "student"
-                ? "font-semibold text-primary-container"
-                : "font-medium text-on-surface-variant"
-            }`}
-          >
-            Student
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setRole("professor");
-              setError("");
-              setIdentifier("");
-              setPassword("");
-            }}
-            className={`relative z-10 flex-1 py-2 text-center text-sm rounded-md transition-colors ${
-              role === "professor"
-                ? "font-semibold text-primary-container"
-                : "font-medium text-on-surface-variant"
-            }`}
-          >
-            Professor
-          </button>
-        </div>
-      </div>
+      <AuthRoleToggle
+        active={role}
+        onChange={(next) => {
+          setRole(next);
+          setError("");
+          setIdentifier("");
+          setPassword("");
+        }}
+      />
 
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4" autoComplete="off">
         <div>

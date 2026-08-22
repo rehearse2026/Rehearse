@@ -1,7 +1,7 @@
 /**
  * AuthBrandPanel.tsx
  * Shared left navy brand panel for login and signup pages.
- * Real logo mark + wordmark + large faded logo watermark.
+ * Real logo mark + white Rehearse wordmark + faded logo watermark.
  */
 
 type AuthBrandPanelProps = {
@@ -31,7 +31,7 @@ export function AuthBrandPanel({
           alt=""
           className="h-9 w-auto brightness-0 invert"
         />
-        <span className="text-[#acc7ff] font-semibold text-3xl leading-9 tracking-tight">
+        <span className="text-white font-semibold text-3xl leading-9 tracking-tight">
           Rehearse
         </span>
       </div>
