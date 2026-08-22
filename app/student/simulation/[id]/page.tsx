@@ -165,7 +165,9 @@ export default async function StudentSimulationPage({
 
   // Test → Stage 1 should always show the ICP pre-gate (reuse same attempt id).
   if (testStageProspecting && isTempoDefault) {
-    const stageData = (attempt.stage_data ?? {}) as Record<string, unknown>;
+    const stageData =
+      ((attempt as unknown as { stage_data?: Record<string, unknown> | null }).stage_data ??
+        {}) as Record<string, unknown>;
     if (stageData.icp || stageData.icpGateComplete === true) {
       const nextStageData = stripIcpFromStageData(stageData);
       const { error: icpResetError } = await supabase
@@ -173,7 +175,10 @@ export default async function StudentSimulationPage({
         .update({ stage_data: nextStageData })
         .eq("id", attempt.id);
       if (!icpResetError) {
-        attempt = { ...attempt, stage_data: nextStageData };
+        attempt = {
+          ...attempt,
+          stage_data: nextStageData,
+        } as unknown as Attempt;
       }
     }
   }

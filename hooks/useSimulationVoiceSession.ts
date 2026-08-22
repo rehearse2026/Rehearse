@@ -93,17 +93,17 @@ export function useSimulationVoiceSession(
   const isMicMuted = (): boolean => Boolean(configRef.current.isMutedRef?.current);
 
   /** Deepgram may ingest while GPT runs; block only during persona playback (echo). */
-  const canIngestStudentSpeech = (): boolean => {
+  const canIngestStudentSpeech = useCallback((): boolean => {
     return (
       !isMicMuted() &&
       !isSpeakingRef.current &&
       Date.now() >= canListenAfterRef.current
     );
-  };
+  }, []);
 
-  const canProcessStudentSpeech = (): boolean => {
+  const canProcessStudentSpeech = useCallback((): boolean => {
     return canIngestStudentSpeech() && !isProcessingUserRef.current;
-  };
+  }, [canIngestStudentSpeech]);
 
   const queuePendingUtterance = (text: string): void => {
     const trimmed = text.trim();
@@ -121,7 +121,7 @@ export function useSimulationVoiceSession(
     }
     pendingUtteranceRef.current = "";
     void handleUserSentenceRef.current(pending);
-  }, []);
+  }, [canProcessStudentSpeech]);
 
   const scheduleFlushPending = useCallback((): void => {
     flushPendingUtterance();
@@ -269,7 +269,7 @@ export function useSimulationVoiceSession(
         scheduleFlushPending();
       }
     },
-    [speakFromApi, appendTranscript, scheduleFlushPending]
+    [speakFromApi, appendTranscript, scheduleFlushPending, canProcessStudentSpeech]
   );
 
   handleUserSentenceRef.current = handleUserSentence;
@@ -375,7 +375,7 @@ export function useSimulationVoiceSession(
         throw err;
       }
     },
-    [handleUserSentence, speakFromApi]
+    [handleUserSentence, speakFromApi, canIngestStudentSpeech, canProcessStudentSpeech]
   );
 
   const endCall = useCallback((): void => {
