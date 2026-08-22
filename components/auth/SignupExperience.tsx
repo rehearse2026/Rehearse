@@ -24,14 +24,19 @@ type SignupExperienceProps = {
   initialJoinCode?: string;
 };
 
-const COPY: Record<AuthRole, { headline: string; subtext: string }> = {
+const COPY: Record<
+  AuthRole,
+  { headline: string; subtext: string; backgroundSrc: string }
+> = {
   student: {
     headline: "Join your class",
     subtext: "Create a student account to get started",
+    backgroundSrc: "/auth/signup-student.jpg",
   },
   professor: {
     headline: "Set up your class",
     subtext: "Create a professor account to get started.",
+    backgroundSrc: "/auth/signup-professor.jpg",
   },
 };
 
@@ -146,7 +151,11 @@ export function SignupExperience({
 
   return (
     <div className="bg-surface text-on-surface h-screen w-full flex m-0 p-0 overflow-hidden">
-      <AuthBrandPanel headline={copy.headline} subtext={copy.subtext} />
+      <AuthBrandPanel
+        headline={copy.headline}
+        subtext={copy.subtext}
+        backgroundSrc={copy.backgroundSrc}
+      />
 
       <div className="w-full lg:w-1/2 bg-surface-container-lowest flex flex-col relative overflow-y-auto">
         <div className="lg:hidden sticky top-0 z-10 w-full p-4 flex justify-center items-center gap-2 border-b border-outline-variant bg-surface-container-lowest">
@@ -154,8 +163,8 @@ export function SignupExperience({
           <span className="text-primary font-semibold text-xl tracking-tight">Rehearse</span>
         </div>
 
-        {/* Top-aligned so toggle Y-position does not jump when form height changes */}
-        <div className="flex-1 flex flex-col items-center px-4 lg:px-8 pt-20 lg:pt-16 pb-10">
+        {/* Vertically centered; in-place toggle keeps Y stable when form height changes */}
+        <div className="flex-1 flex flex-col items-center justify-center px-4 lg:px-8 py-10">
           <div className="w-full max-w-[400px]">
             <div className="text-center mb-8 lg:hidden">
               <h2 className="text-on-surface font-semibold text-2xl leading-8 mb-1">

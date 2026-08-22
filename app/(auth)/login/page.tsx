@@ -65,7 +65,11 @@ export default async function LoginPage({
 
   return (
     <div className="bg-surface h-screen w-full flex m-0 p-0 overflow-hidden text-on-surface">
-      <AuthBrandPanel headline="Welcome back" subtext="Sign in to continue" />
+      <AuthBrandPanel
+        headline="Welcome back"
+        subtext="Sign in to continue"
+        backgroundSrc="/auth/sign-in.jpg"
+      />
 
       <div className="w-full lg:w-1/2 bg-surface-container-lowest flex items-center justify-center p-4 lg:p-8 relative">
         <div className="lg:hidden absolute top-0 left-0 w-full p-4 flex justify-center items-center gap-2 border-b border-outline-variant bg-surface-container-lowest z-10">
