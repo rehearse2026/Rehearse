@@ -12,6 +12,7 @@ import { HandoffModal } from "@/components/tempo/HandoffModal";
 import { TempoExitSimulation } from "@/components/tempo/TempoExitSimulation";
 import { TempoWizardTopBar } from "@/components/tempo/TempoWizardTopBar";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { ProspectingIcpStep } from "@/components/tempo/stages/ProspectingIcpStep";
 import { ProspectingStepPanels } from "@/components/tempo/stages/ProspectingStepPanels";
 import { useProspectingWizard } from "@/hooks/useProspectingWizard";
 import {
@@ -59,6 +60,49 @@ export function ProspectingWizard({
       <div className="fixed inset-x-0 bottom-0 top-16 z-30 flex items-center justify-center bg-surface">
         <p className="text-on-surface-variant font-body-md">Loading your prospecting brief...</p>
       </div>
+    );
+  }
+
+  // ICP is a pre-wizard coaching gate (not a PROSPECTING_STEPS index) so step
+  // advance / canAdvanceProspectingStep / StepPanels stay unchanged.
+  if (!state.icpGateComplete) {
+    return (
+      <>
+        <TempoWizardTopBar
+          attemptId={attemptId}
+          simulationId={simulationId}
+          classId={classId}
+          simulationTitle={simulationTitle}
+          onOpenHandoff={() => setForceHandoffOpen(true)}
+          onBackToDashboard={() =>
+            router.push(`/student/simulation/${simulationId}/entry?classId=${classId}`)
+          }
+        />
+        <div className="fixed inset-0 z-[45] flex flex-col pt-16 overflow-hidden bg-surface">
+          <ProspectingIcpStep
+            attemptId={attemptId}
+            initialIcp={wizard.icpState}
+            onComplete={wizard.completeIcpGate}
+          />
+        </div>
+        {showProspectingHandoff ? (
+          <HandoffModal
+            stageNumber={prospectingMeta.stageNumber}
+            stageName={prospectingMeta.stageName}
+            stageIcon={prospectingMeta.stageIcon}
+            message={TEMPO_HANDOFF_MESSAGES.prospecting}
+            hasAIRestriction={prospectingMeta.hasAIRestriction}
+            onBegin={() => {
+              wizard.dismissProspectingHandoff();
+              setForceHandoffOpen(false);
+            }}
+            onDismiss={() => {
+              wizard.dismissProspectingHandoff();
+              setForceHandoffOpen(false);
+            }}
+          />
+        ) : null}
+      </>
     );
   }
 

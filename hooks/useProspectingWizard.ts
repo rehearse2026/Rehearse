@@ -10,6 +10,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { completeStage } from "@/lib/attempt-actions";
 import type { ProspectDirectoryCompany } from "@/lib/tempo-prospect-directory";
 import {
+  parseProspectingIcpState,
+  type ProspectingIcpState,
+} from "@/lib/tempo-icp-criteria";
+import {
   canAdvanceProspectingStep,
   canSubmitProspectingBrief,
   countWords,
@@ -28,6 +32,8 @@ type UseProspectingWizardOptions = {
 
 type UseProspectingWizardResult = {
   state: ProspectingWizardState;
+  /** Persisted ICP pre-gate payload (null until submitted). */
+  icpState: ProspectingIcpState | null;
   isLoading: boolean;
   isSaving: boolean;
   isSubmitting: boolean;
@@ -52,6 +58,8 @@ type UseProspectingWizardResult = {
   handleSendMessage: () => Promise<void>;
   handleSubmit: () => Promise<void>;
   dismissProspectingHandoff: () => void;
+  /** Called when ICP feedback Continue unlocks the wizard steps. */
+  completeIcpGate: (icp: ProspectingIcpState) => void;
 };
 
 /**
@@ -61,6 +69,7 @@ export function useProspectingWizard({
   attemptId,
 }: UseProspectingWizardOptions): UseProspectingWizardResult {
   const [state, setState] = useState<ProspectingWizardState>(DEFAULT_PROSPECTING_WIZARD_STATE);
+  const [icpState, setIcpState] = useState<ProspectingIcpState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -93,17 +102,31 @@ export function useProspectingWizard({
     const load = async (): Promise<void> => {
       const local = loadProspectingWizardFromStorage(attemptId);
       try {
-        const res = await fetch(
-          `/api/student/prospecting-wizard?attemptId=${encodeURIComponent(attemptId)}`
-        );
-        if (res.ok) {
-          const body = (await res.json()) as { state: ProspectingWizardState };
-          if (!cancelled) {
-            setState(normalizeProspectingWizardState(body.state));
-            saveProspectingWizardToStorage(attemptId, normalizeProspectingWizardState(body.state));
+        const [wizardRes, icpRes] = await Promise.all([
+          fetch(`/api/student/prospecting-wizard?attemptId=${encodeURIComponent(attemptId)}`),
+          fetch(`/api/student/icp-check?attemptId=${encodeURIComponent(attemptId)}`),
+        ]);
+
+        let nextState = local ? normalizeProspectingWizardState(local) : DEFAULT_PROSPECTING_WIZARD_STATE;
+        if (wizardRes.ok) {
+          const body = (await wizardRes.json()) as { state: ProspectingWizardState };
+          nextState = normalizeProspectingWizardState(body.state);
+          saveProspectingWizardToStorage(attemptId, nextState);
+        }
+
+        let nextIcp: ProspectingIcpState | null = null;
+        if (icpRes.ok) {
+          const icpBody = (await icpRes.json()) as { icp: unknown };
+          nextIcp = parseProspectingIcpState(icpBody.icp);
+          if (nextIcp?.feedbackSeen && !nextState.icpGateComplete) {
+            nextState = { ...nextState, icpGateComplete: true };
+            saveProspectingWizardToStorage(attemptId, nextState);
           }
-        } else if (local && !cancelled) {
-          setState(normalizeProspectingWizardState(local));
+        }
+
+        if (!cancelled) {
+          setState(nextState);
+          setIcpState(nextIcp);
         }
       } catch {
         if (local && !cancelled) {
@@ -126,6 +149,18 @@ export function useProspectingWizard({
     <K extends keyof ProspectingWizardState>(key: K, value: ProspectingWizardState[K]): void => {
       setState((prev) => {
         const next = { ...prev, [key]: value };
+        void persistState(next);
+        return next;
+      });
+    },
+    [persistState]
+  );
+
+  const completeIcpGate = useCallback(
+    (icp: ProspectingIcpState): void => {
+      setIcpState(icp);
+      setState((prev) => {
+        const next = { ...prev, icpGateComplete: true };
         void persistState(next);
         return next;
       });
@@ -321,6 +356,13 @@ export function useProspectingWizard({
         chatMessages: state.chatMessages,
         openingMessage: state.openingMessage,
         selfCheck: state.selfCheck,
+        icp: icpState
+          ? {
+              originalText: icpState.originalText,
+              result: icpState.result,
+              activeIcpText: icpState.activeIcpText,
+            }
+          : null,
       });
 
       await completeStage(
@@ -333,7 +375,7 @@ export function useProspectingWizard({
     } finally {
       setIsSubmitting(false);
     }
-  }, [attemptId, state]);
+  }, [attemptId, icpState, state]);
 
   const dismissProspectingHandoff = useCallback((): void => {
     updateField("prospectingHandoffSeen", true);
@@ -345,6 +387,7 @@ export function useProspectingWizard({
 
   return {
     state,
+    icpState,
     isLoading,
     isSaving,
     isSubmitting,
@@ -365,5 +408,6 @@ export function useProspectingWizard({
     handleSendMessage,
     handleSubmit,
     dismissProspectingHandoff,
+    completeIcpGate,
   };
 }

@@ -42,13 +42,41 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { data: attempt } = await supabase
       .from("attempts")
-      .select("id, student_id")
+      .select("id, student_id, stage_data")
       .eq("id", attemptId)
       .eq("student_id", auth.session.studentId)
       .single();
 
     if (!attempt) {
       return NextResponse.json({ error: "Attempt not found." }, { status: 404 });
+    }
+
+    // PART 4: ensure prospecting transcript carries the active ICP from stage_data
+    // (coaching gate) even if the client omittted it.
+    let transcriptToStore = transcript;
+    if (stage === "prospecting") {
+      try {
+        const parsed =
+          typeof transcript === "string" && transcript.trim()
+            ? (JSON.parse(transcript) as Record<string, unknown>)
+            : {};
+        const stageData = (attempt.stage_data ?? {}) as Record<string, unknown>;
+        const icpRaw = stageData.icp;
+        if (icpRaw && typeof icpRaw === "object" && !Array.isArray(icpRaw)) {
+          const icpObj = icpRaw as Record<string, unknown>;
+          if (!parsed.icp) {
+            parsed.icp = {
+              originalText: typeof icpObj.originalText === "string" ? icpObj.originalText : "",
+              result: icpObj.result === "corrected" ? "corrected" : "affirmed",
+              activeIcpText:
+                typeof icpObj.activeIcpText === "string" ? icpObj.activeIcpText : "",
+            };
+            transcriptToStore = JSON.stringify(parsed);
+          }
+        }
+      } catch {
+        /* keep original transcript */
+      }
     }
 
     if (stage === "prospecting") {
@@ -133,7 +161,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       const discoveryPrepPayload =
         stage === "discovery"
           ? (() => {
-              const prep = parseDiscoveryPreCallPrepFromTranscript(transcript);
+              const prep = parseDiscoveryPreCallPrepFromTranscript(transcriptToStore);
               if (!prep) {
                 return null;
               }
@@ -145,7 +173,12 @@ export async function POST(request: Request): Promise<NextResponse> {
             })()
           : null;
 
-      badgesEarned = await detectTempoBadges(stage, transcript, crmFields, discoveryPrepPayload);
+      badgesEarned = await detectTempoBadges(
+        stage,
+        transcriptToStore,
+        crmFields,
+        discoveryPrepPayload
+      );
     }
 
     await supabase.from("stage_scores").upsert(
@@ -154,7 +187,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         stage,
         score,
         feedback,
-        transcript,
+        transcript: transcriptToStore,
         badges_earned: badgesEarned,
       },
       { onConflict: "attempt_id,stage" }

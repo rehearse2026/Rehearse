@@ -145,6 +145,11 @@ export type ProspectingWizardState = {
   prospectingHandoffSeen: boolean;
   /** CRM lead id marked as the Prospecting target (status selected). */
   selectedLeadId: string | null;
+  /**
+   * True after ICP pre-gate Continue. ICP payload itself lives at stage_data.icp
+   * (sibling key), not inside the wizard draft fields.
+   */
+  icpGateComplete: boolean;
 };
 
 export const DEFAULT_PROSPECTING_WIZARD_STATE: ProspectingWizardState = {
@@ -160,6 +165,7 @@ export const DEFAULT_PROSPECTING_WIZARD_STATE: ProspectingWizardState = {
   agentCorrections: "",
   prospectingHandoffSeen: false,
   selectedLeadId: null,
+  icpGateComplete: false,
 };
 
 /**
@@ -237,6 +243,11 @@ export function normalizeProspectingWizardState(
     prospectingHandoffSeen: Boolean(anyRaw.prospectingHandoffSeen),
     selectedLeadId,
     currentStep: step,
+    icpGateComplete:
+      anyRaw.icpGateComplete === true ||
+      (typeof anyRaw.icp === "object" &&
+        anyRaw.icp !== null &&
+        (anyRaw.icp as { feedbackSeen?: unknown }).feedbackSeen === true),
   };
 }
 
@@ -330,6 +341,8 @@ export function countWords(text: string): number {
 
 /**
  * Returns whether the student can advance from the current wizard step.
+ * Indices are Company Directory (0) → Lead Selection (1) → Opening (2).
+ * ICP is a pre-wizard gate (not in PROSPECTING_STEPS) — see ProspectingIcpStep.
  */
 export function canAdvanceProspectingStep(
   stepIndex: number,
