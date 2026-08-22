@@ -14,6 +14,7 @@ import { SimulationRunner } from "@/components/SimulationRunner";
 import { ATTEMPT_STATUS, DEFAULT_CLASS_ID } from "@/lib/constants";
 import { parseDiscoverySummaryFromTranscript, parsePresentationFormFromTranscript } from "@/lib/tempo-presentation";
 import { parseObjectionSummaryFromTranscript } from "@/lib/tempo-negotiation";
+import { parseProspectingIcpState } from "@/lib/tempo-icp-criteria";
 import { stripIcpFromStageData } from "@/lib/tempo-prospecting";
 import { isTempoDefaultSimulation } from "@/lib/tempo-simulation";
 import { getStudentSession } from "@/lib/student-session";
@@ -163,21 +164,31 @@ export default async function StudentSimulationPage({
     testStageObjections ||
     testStageNegotiation;
 
-  // Test → Stage 1 should always show the ICP pre-gate (reuse same attempt id).
-  if (testStageProspecting && isTempoDefault) {
+  // Ensure stale icpGateComplete flags never skip the ICP step.
+  if (isTempoDefault) {
     const stageData =
       ((attempt as unknown as { stage_data?: Record<string, unknown> | null }).stage_data ??
         {}) as Record<string, unknown>;
-    const nextStageData = stripIcpFromStageData(stageData);
-    const { error: icpResetError } = await supabase
-      .from("attempts")
-      .update({ stage_data: nextStageData })
-      .eq("id", attempt.id);
-    if (!icpResetError) {
-      attempt = {
-        ...attempt,
-        stage_data: nextStageData,
-      } as unknown as Attempt;
+    const icp = parseProspectingIcpState(stageData.icp);
+    let nextStageData: Record<string, unknown> | null = null;
+
+    if (testStageProspecting) {
+      nextStageData = stripIcpFromStageData(stageData);
+    } else if (icp?.feedbackSeen !== true && stageData.icpGateComplete === true) {
+      nextStageData = { ...stageData, icpGateComplete: false };
+    }
+
+    if (nextStageData) {
+      const { error: icpResetError } = await supabase
+        .from("attempts")
+        .update({ stage_data: nextStageData })
+        .eq("id", attempt.id);
+      if (!icpResetError) {
+        attempt = {
+          ...attempt,
+          stage_data: nextStageData,
+        } as unknown as Attempt;
+      }
     }
   }
 

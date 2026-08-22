@@ -118,11 +118,16 @@ export function useProspectingWizard({
         if (icpRes.ok) {
           const icpBody = (await icpRes.json()) as { icp: unknown };
           nextIcp = parseProspectingIcpState(icpBody.icp);
-          if (nextIcp?.feedbackSeen && !nextState.icpGateComplete) {
-            nextState = { ...nextState, icpGateComplete: true };
-            saveProspectingWizardToStorage(attemptId, nextState);
-          }
         }
+
+        const icpDone = nextIcp?.feedbackSeen === true;
+        nextState = {
+          ...nextState,
+          icpGateComplete: icpDone,
+          currentStep: icpDone ? nextState.currentStep : 0,
+          prospectingStepVersion: icpDone ? nextState.prospectingStepVersion ?? 2 : undefined,
+        };
+        saveProspectingWizardToStorage(attemptId, nextState);
 
         if (!cancelled) {
           setState(nextState);
@@ -160,7 +165,12 @@ export function useProspectingWizard({
     (icp: ProspectingIcpState): void => {
       setIcpState(icp);
       setState((prev) => {
-        const next = { ...prev, icpGateComplete: true };
+        const next = {
+          ...prev,
+          icpGateComplete: true,
+          currentStep: Math.max(prev.currentStep, 1),
+          prospectingStepVersion: 2,
+        };
         void persistState(next);
         return next;
       });
@@ -170,9 +180,12 @@ export function useProspectingWizard({
 
   const setCurrentStep = useCallback(
     (step: number): void => {
+      if (step > 0 && !state.icpGateComplete) {
+        return;
+      }
       updateField("currentStep", step);
     },
-    [updateField]
+    [state.icpGateComplete, updateField]
   );
 
   /**
@@ -253,7 +266,7 @@ export function useProspectingWizard({
   const completeLeadSelection = useCallback(
     async (leadId: string): Promise<void> => {
       setState((prev) => {
-        const next = { ...prev, selectedLeadId: leadId, currentStep: 2 };
+        const next = { ...prev, selectedLeadId: leadId, currentStep: 3, prospectingStepVersion: 2 };
         void persistState(next);
         return next;
       });

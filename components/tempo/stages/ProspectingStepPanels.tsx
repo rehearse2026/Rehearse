@@ -7,9 +7,11 @@
 "use client";
 
 import { ProspectingCompanyDirectory } from "@/components/tempo/stages/ProspectingCompanyDirectory";
+import { ProspectingIcpStep } from "@/components/tempo/stages/ProspectingIcpStep";
 import { ProspectingLeadSelectionStep } from "@/components/tempo/stages/ProspectingLeadSelectionStep";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import type { ProspectDirectoryCompany } from "@/lib/tempo-prospect-directory";
+import type { ProspectingIcpState } from "@/lib/tempo-icp-criteria";
 import {
   OPENING_MESSAGE_TIPS,
   type ProspectingWizardState,
@@ -31,6 +33,8 @@ type StepPanelsProps = {
     value: ProspectingWizardState[K]
   ) => void;
   onLeadSelected: (leadId: string) => Promise<void>;
+  icpState: ProspectingIcpState | null;
+  onIcpComplete: (icp: ProspectingIcpState) => void;
 };
 
 /**
@@ -49,8 +53,20 @@ export function ProspectingStepPanels({
   onCompaniesLoaded,
   onFieldChange,
   onLeadSelected,
+  icpState,
+  onIcpComplete,
 }: StepPanelsProps): React.ReactElement {
-  if (currentStep === 1) {
+  if (currentStep === 0) {
+    return (
+      <ProspectingIcpStep
+        attemptId={attemptId}
+        initialIcp={icpState}
+        onComplete={onIcpComplete}
+      />
+    );
+  }
+
+  if (currentStep === 2) {
     return (
       <ProspectingLeadSelectionStep
         attemptId={attemptId}
@@ -60,7 +76,7 @@ export function ProspectingStepPanels({
     );
   }
 
-  if (currentStep === 0) {
+  if (currentStep === 1) {
     return (
       <ProspectingCompanyDirectory
         attemptId={attemptId}

@@ -12,7 +12,6 @@ import { HandoffModal } from "@/components/tempo/HandoffModal";
 import { TempoExitSimulation } from "@/components/tempo/TempoExitSimulation";
 import { TempoWizardTopBar } from "@/components/tempo/TempoWizardTopBar";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
-import { ProspectingIcpStep } from "@/components/tempo/stages/ProspectingIcpStep";
 import { ProspectingStepPanels } from "@/components/tempo/stages/ProspectingStepPanels";
 import { useProspectingWizard } from "@/hooks/useProspectingWizard";
 import {
@@ -52,8 +51,9 @@ export function ProspectingWizard({
   const { currentStep } = state;
   const prospectingMeta = TEMPO_HANDOFF_STAGE_META.prospecting;
   const discoveryMeta = TEMPO_HANDOFF_STAGE_META.discovery;
+  const icpComplete = wizard.icpState?.feedbackSeen === true || state.icpGateComplete;
   const showProspectingHandoff =
-    state.icpGateComplete &&
+    icpComplete &&
     !wizard.isLoading &&
     (!state.prospectingHandoffSeen || forceHandoffOpen) &&
     !postSubmitHandoff;
@@ -63,49 +63,6 @@ export function ProspectingWizard({
       <div className="fixed inset-x-0 bottom-0 top-16 z-30 flex items-center justify-center bg-surface">
         <p className="text-on-surface-variant font-body-md">Loading your prospecting brief...</p>
       </div>
-    );
-  }
-
-  // ICP is a pre-wizard coaching gate (not a PROSPECTING_STEPS index) so step
-  // advance / canAdvanceProspectingStep / StepPanels stay unchanged.
-  if (!state.icpGateComplete) {
-    return (
-      <>
-        <TempoWizardTopBar
-          attemptId={attemptId}
-          simulationId={simulationId}
-          classId={classId}
-          simulationTitle={simulationTitle}
-          onOpenHandoff={() => setForceHandoffOpen(true)}
-          onBackToDashboard={() =>
-            router.push(`/student/simulation/${simulationId}/entry?classId=${classId}`)
-          }
-        />
-        <div className="fixed inset-0 z-[45] flex flex-col pt-16 overflow-hidden bg-surface">
-          <ProspectingIcpStep
-            attemptId={attemptId}
-            initialIcp={wizard.icpState}
-            onComplete={wizard.completeIcpGate}
-          />
-        </div>
-        {showProspectingHandoff ? (
-          <HandoffModal
-            stageNumber={prospectingMeta.stageNumber}
-            stageName={prospectingMeta.stageName}
-            stageIcon={prospectingMeta.stageIcon}
-            message={TEMPO_HANDOFF_MESSAGES.prospecting}
-            hasAIRestriction={prospectingMeta.hasAIRestriction}
-            onBegin={() => {
-              wizard.dismissProspectingHandoff();
-              setForceHandoffOpen(false);
-            }}
-            onDismiss={() => {
-              wizard.dismissProspectingHandoff();
-              setForceHandoffOpen(false);
-            }}
-          />
-        ) : null}
-      </>
     );
   }
 
@@ -177,20 +134,6 @@ export function ProspectingWizard({
           </div>
 
           <nav className="flex-1 p-md mt-md overflow-y-auto">
-            <div className="flex gap-md">
-              <div className="flex flex-col items-center shrink-0">
-                <div className="z-10 w-6 h-6 rounded-full flex items-center justify-center font-code-md shrink-0 text-xs bg-tertiary-container text-on-tertiary-fixed">
-                  <MaterialIcon name="check" className="text-[14px]" />
-                </div>
-                <div className="w-0.5 h-12 mt-2 mb-1 shrink-0 bg-tertiary-container" />
-              </div>
-              <div className="pt-0.5 min-w-0 pb-5">
-                <h3 className="font-label-md text-label-md text-on-primary-container">
-                  Define Your ICP
-                </h3>
-                <p className="text-label-sm text-on-primary-container/70">Completed</p>
-              </div>
-            </div>
             {PROSPECTING_STEPS.map((step, index) => {
               const isCompleted = index < currentStep;
               const isActive = index === currentStep;
@@ -253,7 +196,8 @@ export function ProspectingWizard({
                 <button
                   type="button"
                   onClick={() => wizard.setCurrentStep(currentStep - 1)}
-                  className="inline-flex items-center gap-1 text-label-sm text-on-surface-variant hover:text-primary transition-colors shrink-0"
+                  disabled={currentStep === 1 && !icpComplete}
+                  className="inline-flex items-center gap-1 text-label-sm text-on-surface-variant hover:text-primary transition-colors shrink-0 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <MaterialIcon name="arrow_back" className="text-[16px]" />
                   Back to {PROSPECTING_STEPS[currentStep - 1]?.label ?? "previous step"}
@@ -268,7 +212,7 @@ export function ProspectingWizard({
             </div>
 
             <div className="flex items-center gap-md shrink-0">
-                {currentStep === PROSPECTING_STEPS.length - 1 ? (
+                {currentStep > 0 && currentStep === PROSPECTING_STEPS.length - 1 ? (
                   <button
                     type="button"
                     onClick={() => void wizard.handleSaveDraft()}
@@ -278,7 +222,7 @@ export function ProspectingWizard({
                   </button>
                 ) : null}
 
-                {currentStep < PROSPECTING_STEPS.length - 1 ? (
+                {currentStep > 0 && currentStep < PROSPECTING_STEPS.length - 1 ? (
                   <button
                     type="button"
                     disabled={!wizard.canProceed}
@@ -315,7 +259,7 @@ export function ProspectingWizard({
 
           <div
             className={`flex-1 min-h-0 overflow-y-auto ${
-              currentStep === 0 ? "p-2 lg:p-3" : "p-4 lg:p-xl"
+              currentStep === 1 ? "p-2 lg:p-3" : "p-4 lg:p-xl"
             }`}
           >
             <ProspectingStepPanels
@@ -331,6 +275,8 @@ export function ProspectingWizard({
               onCompaniesLoaded={wizard.setDirectoryCompanies}
               onFieldChange={wizard.updateField}
               onLeadSelected={(leadId) => wizard.completeLeadSelection(leadId)}
+              icpState={wizard.icpState}
+              onIcpComplete={wizard.completeIcpGate}
             />
           </div>
         </section>

@@ -8,7 +8,7 @@ import type { ChatMessage } from "@/types";
 import { parseProspectingIcpState } from "@/lib/tempo-icp-criteria";
 import { hasProspectingResearchActivity } from "@/lib/tempo-prospect-directory";
 
-export type ProspectingStepId = "research" | "select_lead" | "opening";
+export type ProspectingStepId = "icp" | "research" | "select_lead" | "opening";
 
 export type ProspectingStepDefinition = {
   id: ProspectingStepId;
@@ -17,6 +17,7 @@ export type ProspectingStepDefinition = {
 };
 
 export const PROSPECTING_STEPS: readonly ProspectingStepDefinition[] = [
+  { id: "icp", label: "Define Your ICP", description: "Who is Tempo for?" },
   { id: "research", label: "Company Directory", description: "Research candidate companies" },
   {
     id: "select_lead",
@@ -146,6 +147,8 @@ export type ProspectingWizardState = {
   prospectingHandoffSeen: boolean;
   /** CRM lead id marked as the Prospecting target (status selected). */
   selectedLeadId: string | null;
+  /** Bumped when PROSPECTING_STEPS gained the ICP row at index 0. */
+  prospectingStepVersion?: number;
   /**
    * True after ICP pre-gate Continue. ICP payload itself lives at stage_data.icp
    * (sibling key), not inside the wizard draft fields.
@@ -229,6 +232,13 @@ export function normalizeProspectingWizardState(
 
   const icpRecord = parseProspectingIcpState(anyRaw.icp);
 
+  let resolvedStep = step;
+  if (!icpRecord?.feedbackSeen) {
+    resolvedStep = 0;
+  } else if (anyRaw.prospectingStepVersion !== 2) {
+    resolvedStep = Math.min(step + 1, PROSPECTING_STEPS.length - 1);
+  }
+
   return {
     ...DEFAULT_PROSPECTING_WIZARD_STATE,
     chatMessages: activeMessages,
@@ -245,7 +255,9 @@ export function normalizeProspectingWizardState(
     agentCorrections: typeof anyRaw.agentCorrections === "string" ? anyRaw.agentCorrections : "",
     prospectingHandoffSeen: Boolean(anyRaw.prospectingHandoffSeen),
     selectedLeadId,
-    currentStep: step,
+    currentStep: resolvedStep,
+    prospectingStepVersion:
+      typeof anyRaw.prospectingStepVersion === "number" ? anyRaw.prospectingStepVersion : undefined,
     /** Only skip the ICP gate after manager feedback Continue (persisted on stage_data.icp). */
     icpGateComplete: icpRecord?.feedbackSeen === true,
   };
@@ -372,8 +384,7 @@ export function countWords(text: string): number {
 
 /**
  * Returns whether the student can advance from the current wizard step.
- * Indices are Company Directory (0) → Lead Selection (1) → Opening (2).
- * ICP is a pre-wizard gate (not in PROSPECTING_STEPS) — see ProspectingIcpStep.
+ * Indices: ICP (0) → Company Directory (1) → Lead Selection (2) → Opening (3).
  */
 export function canAdvanceProspectingStep(
   stepIndex: number,
@@ -381,10 +392,12 @@ export function canAdvanceProspectingStep(
 ): boolean {
   switch (stepIndex) {
     case 0:
-      return hasProspectingResearchActivity(state.companyChats);
+      return state.icpGateComplete;
     case 1:
-      return Boolean(state.selectedLeadId);
+      return hasProspectingResearchActivity(state.companyChats);
     case 2:
+      return Boolean(state.selectedLeadId);
+    case 3:
       return canSubmitProspectingBrief(state);
     default:
       return false;
