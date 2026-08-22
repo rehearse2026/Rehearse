@@ -14,6 +14,7 @@ import { SimulationRunner } from "@/components/SimulationRunner";
 import { ATTEMPT_STATUS, DEFAULT_CLASS_ID } from "@/lib/constants";
 import { parseDiscoverySummaryFromTranscript, parsePresentationFormFromTranscript } from "@/lib/tempo-presentation";
 import { parseObjectionSummaryFromTranscript } from "@/lib/tempo-negotiation";
+import { stripIcpFromStageData } from "@/lib/tempo-prospecting";
 import { isTempoDefaultSimulation } from "@/lib/tempo-simulation";
 import { getStudentSession } from "@/lib/student-session";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -161,6 +162,21 @@ export default async function StudentSimulationPage({
     testStagePresentation ||
     testStageObjections ||
     testStageNegotiation;
+
+  // Test → Stage 1 should always show the ICP pre-gate (reuse same attempt id).
+  if (testStageProspecting && isTempoDefault) {
+    const stageData = (attempt.stage_data ?? {}) as Record<string, unknown>;
+    if (stageData.icp || stageData.icpGateComplete === true) {
+      const nextStageData = stripIcpFromStageData(stageData);
+      const { error: icpResetError } = await supabase
+        .from("attempts")
+        .update({ stage_data: nextStageData })
+        .eq("id", attempt.id);
+      if (!icpResetError) {
+        attempt = { ...attempt, stage_data: nextStageData };
+      }
+    }
+  }
 
   // Completing Stage 1 advances current_stage immediately, but Stage 2 should
   // not render until the student explicitly accepts its manager handoff.

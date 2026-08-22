@@ -297,6 +297,37 @@ export function clearProspectingWizardFromStorage(attemptId: string): void {
 }
 
 /**
+ * Clears all prospecting wizard drafts from localStorage (Test → Stage 1).
+ */
+export function clearAllProspectingWizardFromStorage(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const keys: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (key?.startsWith(STORAGE_PREFIX)) {
+      keys.push(key);
+    }
+  }
+  for (const key of keys) {
+    window.localStorage.removeItem(key);
+  }
+}
+
+/**
+ * Removes ICP pre-gate payload from persisted stage_data (Test → Stage 1).
+ */
+export function stripIcpFromStageData(
+  stageData: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  const next = { ...(stageData ?? {}) };
+  delete next.icp;
+  next.icpGateComplete = false;
+  return next;
+}
+
+/**
  * Strips LaTeX/math markup from AI replies for readable plain-text display.
  */
 export function sanitizeAiResearchReply(text: string): string {

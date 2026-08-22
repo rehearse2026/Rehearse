@@ -7,6 +7,7 @@
 
 import { useRouter } from "next/navigation";
 import { clearAllDiscoveryPrepFromStorage } from "@/lib/tempo-discovery";
+import { clearAllProspectingWizardFromStorage } from "@/lib/tempo-prospecting";
 import { TEMPO_TEST_RESULTS_OUTCOMES } from "@/lib/tempo-results";
 
 type TestShortcutsDropdownProps = {
@@ -49,6 +50,9 @@ export function TestShortcutsDropdown({
           const stage = value.replace("stage:", "");
           // Test jumps reuse the same attempt id — wipe Discovery prep so Stage 2
           // does not restore a prior "Plan Your Discovery Call" draft.
+          if (stage === "prospecting") {
+            clearAllProspectingWizardFromStorage();
+          }
           if (stage === "discovery") {
             clearAllDiscoveryPrepFromStorage();
           }
