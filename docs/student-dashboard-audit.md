@@ -4,6 +4,8 @@ Read-only audit of `/student/dashboard` (student home).
 Date of investigation: 2026-08-22.  
 Scope: code as present in the workspace; no behavior was changed for this document.
 
+**Sections:** [1. Locate the Real Page](#1-locate-the-real-page) · [2. Data Sources](#2-data-sources) · [3. Layout Structure](#3-layout-structure) · [4. Tempo-Specific vs. Generic](#4-tempo-specific-vs-generic-content) · [5. Interactive Elements](#5-interactive-elements) · [6. Responsive / State Variations](#6-responsive--state-variations) · [7. Styling / Design Tokens](#7-styling--design-tokens-currently-used) · [Notes / Gaps](#notes--gaps)
+
 ---
 
 ## 1. Locate the Real Page
@@ -26,7 +28,7 @@ The route `/student/dashboard` is rendered by **`app/student/dashboard/page.tsx`
 | `components/StudentAttemptHistory.tsx` | Completed attempts table / empty message |
 | `components/EmptyState.tsx` | Empty classes state |
 | `app/student/dashboard/JoinClassButton.tsx` | Header “Join a Class” + modal |
-| `app/student/dashboard/TestShortcutsDropdown.tsx` | Header Tempo test `<select>` |
+| `app/student/dashboard/TestShortcutsDropdown.tsx` | Header Tempo test shortcuts dropdown |
 
 **Confirmed NOT rendered on `/student/dashboard`:**
 
@@ -35,9 +37,9 @@ The route `/student/dashboard` is rendered by **`app/student/dashboard/page.tsx`
 
 ### Evidence
 
-Page entry:
+**Page entry** (`app/student/dashboard/page.tsx`):
 
-```26:32:app/student/dashboard/page.tsx
+```tsx
 export default async function StudentDashboardPage(): Promise<React.ReactElement> {
   const session = await getStudentSession();
   if (!session) {
@@ -45,11 +47,13 @@ export default async function StudentDashboardPage(): Promise<React.ReactElement
   }
 
   const enrolledClasses = await loadStudentEnrolledClasses(session.studentId);
+  // ... then attempts query + JSX (see sections 2–3)
+}
 ```
 
-Layout wraps children in shell:
+**Layout wraps children in shell** (`app/student/layout.tsx`):
 
-```16:38:app/student/layout.tsx
+```tsx
 export default async function StudentLayout({
   children,
 }: {
@@ -77,20 +81,34 @@ export default async function StudentLayout({
 }
 ```
 
-Shell shows header + sidebar on dashboard (not hidden):
+**Shell shows header + sidebar on dashboard** (`components/student/StudentPortalShell.tsx`):
 
-```24:48:components/student/StudentPortalShell.tsx
+```tsx
 function shouldHideSidebar(pathname: string): boolean {
   return /^\/student\/simulation\/[^/]+$/.test(pathname);
 }
-...
+
+export function StudentPortalShell({ ... }: StudentPortalShellProps): React.ReactElement {
+  const pathname = usePathname();
+  const hideSidebar = shouldHideSidebar(pathname);
+
+  return (
+    <StudentShellProvider>
+      <div className="fixed inset-0 z-40 flex flex-col bg-surface overflow-hidden font-body-md text-body-md text-on-surface">
         {!hideSidebar && (
           <StudentDashboardHeader displayName={displayName} classCount={classCount} />
         )}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {!hideSidebar && <StudentSidebar enrolledClasses={enrolledClasses} />}
           <main className="flex-1 overflow-y-auto custom-scrollbar bg-surface">{children}</main>
+        </div>
+      </div>
+    </StudentShellProvider>
+  );
+}
 ```
+
+On `/student/dashboard`, `hideSidebar` is false, so header and sidebar both render.
 
 ---
 
@@ -105,26 +123,26 @@ function shouldHideSidebar(pathname: string): boolean {
 | Simulation **count** on cards | Count of published sims linked via `class_simulations` (not full sim list on this page) |
 | Completed attempt history | Direct Supabase query on `attempts` joined to `simulations`, filtered `status = completed`, limit 20 |
 | Header “N classes enrolled” | `enrolledClasses.length` from layout’s same loader |
-| No leaderboard preview | Confirmed: no leaderboard query or component on this page |
+| Leaderboard preview | **Not present** — no leaderboard query or component on this page |
 
 There is **no client-side fetch** on the dashboard page itself for the main content — it is a server component that awaits session + helpers/queries before render.
 
 ### Evidence
 
-**Session (name):**
+**Session (name)** — `app/student/dashboard/page.tsx`:
 
-```27:30:app/student/dashboard/page.tsx
+```tsx
   const session = await getStudentSession();
   if (!session) {
     redirect("/student-login");
   }
 ```
 
-Welcome uses `session.displayName` (lines 59–60).
+Welcome JSX uses `session.displayName` (around lines 59–60).
 
-**Enrolled classes loader** (`lib/student-class-data.ts`):
+**Enrolled classes loader** — `lib/student-class-data.ts` (`loadStudentEnrolledClasses`):
 
-```42:75:lib/student-class-data.ts
+```ts
   let studentClasses = (
     await supabase
       .from("student_classes")
@@ -139,7 +157,8 @@ Welcome uses `session.displayName` (lines 59–60).
       .eq("student_id", studentId);
     studentClasses = fallback.data ?? [];
   }
-  ...
+
+  // ... then published sim counts:
   const { data: classSimRows } = await supabase
     .from("class_simulations")
     .select("class_id, simulations ( is_published )")
@@ -154,11 +173,11 @@ Welcome uses `session.displayName` (lines 59–60).
   }
 ```
 
-Mapped fields returned to the UI: `classId`, `className` (`classes.name`), `description`, `cardImageUrl` (`card_image_url`), `cardColorScheme`, `simulationCount`. Default class is sorted first (`DEFAULT_CLASS_ID`).
+Mapped fields returned to the UI: `classId`, `className` (`classes.name`), `description`, `cardImageUrl` (`card_image_url`), `cardColorScheme`, `accentColor`, `simulationCount`. Results are sorted so `DEFAULT_CLASS_ID` is first.
 
-**Completed attempts** (page-local query):
+**Completed attempts** — page-local query in `app/student/dashboard/page.tsx`:
 
-```34:41:app/student/dashboard/page.tsx
+```tsx
   const supabase = createServiceClient();
   const { data: completedAttempts } = await supabase
     .from("attempts")
@@ -168,6 +187,8 @@ Mapped fields returned to the UI: `classId`, `className` (`classes.name`), `desc
     .order("completed_at", { ascending: false })
     .limit(20);
 ```
+
+Rows are mapped into `StudentAttemptRow[]` and passed to `StudentAttemptHistory`.
 
 **Join Class modal** (header, not page body): `POST /api/student/join-class` with `{ joinCode }` — see section 5.
 
@@ -182,7 +203,7 @@ Mapped fields returned to the UI: `classId`, `className` (`classes.name`), `desc
 1. **Header** (`StudentDashboardHeader`) — sticky top bar height `h-16`
    - Left: logo image + “Rehearse” wordmark → `/student/dashboard`
    - Right: Join a Class, Test shortcuts dropdown, display name + class-count subtitle + avatar initial (md+), Logout
-2. **Sidebar** (`StudentSidebar`, `hidden md:flex`) — left column, collapsible 64 ↔ 72px
+2. **Sidebar** (`StudentSidebar`, `hidden md:flex`) — left column, collapsible `w-64` ↔ `w-[72px]`
    - Collapse chevron
    - Primary nav: “My Classes” → `/student/dashboard`
    - “Enrolled” list of class links → `/student/classes/[classId]` (icons: `auto_awesome` for system default, `folder` otherwise)
@@ -191,8 +212,8 @@ Mapped fields returned to the UI: `classId`, `className` (`classes.name`), `desc
 
 **Main content order (`page.tsx`):**
 
-1. Welcome heading: “Welcome back, {displayName}” + subtitle about class count / join prompt  
-2. Either **EmptyState** (no classes) or **grid of `StudentClassCard`** (2 cols sm, 3 cols lg)  
+1. Welcome heading: “Welcome back, {displayName}” + subtitle about class count / join prompt
+2. Either **EmptyState** (no classes) or **grid of `StudentClassCard`** (`sm:grid-cols-2`, `lg:grid-cols-3`)
 3. **`StudentAttemptHistory`** — heading + table of completed sims, or empty copy in a card
 
 **No page footer** beyond the sidebar’s “Student Portal” label.
@@ -204,9 +225,9 @@ Hardcoded vs dynamic:
 
 ### Evidence
 
-Main structure:
+**Main structure** — `app/student/dashboard/page.tsx` return:
 
-```54:96:app/student/dashboard/page.tsx
+```tsx
   return (
     <div className="animate-fade-in-up">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8">
@@ -215,19 +236,43 @@ Main structure:
             <h1 className="font-headline-lg text-headline-lg text-primary">
               Welcome back, {session.displayName}
             </h1>
-            ...
+            <p className="text-on-surface-variant font-body-md mt-1">
+              {enrolledClasses.length === 0
+                ? "Join a class to get started."
+                : enrolledClasses.length === 1
+                  ? "Open your class to start a simulation."
+                  : `${enrolledClasses.length} classes — open one to view simulations.`}
+            </p>
           </div>
         </div>
+
         {enrolledClasses.length === 0 ? (
-          <EmptyState ... />
+          <EmptyState
+            icon="🎓"
+            title="No classes yet."
+            description="Use Join a Class in the header with your professor's class code to get started."
+          />
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {enrolledClasses.map((cls) => (
-              <StudentClassCard ... />
+              <StudentClassCard
+                key={cls.classId}
+                classId={cls.classId}
+                className={cls.className}
+                description={cls.description}
+                cardImageUrl={cls.cardImageUrl}
+                cardColorScheme={cls.cardColorScheme}
+                simulationCount={cls.simulationCount}
+                isSystemDefault={cls.classId === DEFAULT_CLASS_ID}
+              />
             ))}
           </div>
         )}
+
         <StudentAttemptHistory attempts={history} />
+      </div>
+    </div>
+  );
 ```
 
 ---
@@ -238,28 +283,20 @@ Main structure:
 
 **Generic (works for any enrolled class):**
 
-- Class cards driven by `student_classes` / `classes` / published `class_simulations` counts  
-- Attempt history for any completed attempt’s linked simulation  
-- Join Class by code  
-- Sidebar enrolled list  
+- Class cards driven by `student_classes` / `classes` / published `class_simulations` counts
+- Attempt history for any completed attempt’s linked simulation
+- Join Class by code
+- Sidebar enrolled list
 
 **Special-cased to the system default class (“Rehearse Essentials”), not named “Tempo” in the card UI:**
 
-- When `classId === DEFAULT_CLASS_ID`, the card uses fixed banner `DEFAULT_CLASS_BANNER_URL`, name `DEFAULT_CLASS_NAME`, description `DEFAULT_CLASS_DESCRIPTION`, black accent, and badge “Available to all students”  
-- Sidebar forces label `DEFAULT_CLASS_NAME` and `auto_awesome` icon for that id  
-- Default class is sorted first in `loadStudentEnrolledClasses`  
+- When `classId === DEFAULT_CLASS_ID`, the card uses fixed banner `DEFAULT_CLASS_BANNER_URL`, name `DEFAULT_CLASS_NAME`, description `DEFAULT_CLASS_DESCRIPTION`, black accent, and badge “Available to all students”
+- Sidebar forces label `DEFAULT_CLASS_NAME` and `auto_awesome` icon for that id
+- Default class is sorted first in `loadStudentEnrolledClasses`
 
 **Explicitly Tempo / Tempo-simulation hardcoded on this page’s chrome:**
 
-- `TestShortcutsDropdown` is always wired with `TEMPO_SIMULATION_ID` and `DEFAULT_CLASS_ID` — stages/results are Tempo stage names; navigation targets the Tempo simulation under the default class only  
-
-```57:61:components/student/StudentDashboardHeader.tsx
-          <JoinClassButton />
-          <TestShortcutsDropdown
-            simulationId={TEMPO_SIMULATION_ID}
-            classId={DEFAULT_CLASS_ID}
-          />
-```
+- `TestShortcutsDropdown` is always wired with `TEMPO_SIMULATION_ID` and `DEFAULT_CLASS_ID` — stages/results are Tempo stage names; navigation targets the Tempo simulation under the default class only
 
 **Not on this page:** `TempoSimulationEntryView` (Tempo entry briefing) — irrelevant to dashboard rendering.
 
@@ -267,32 +304,63 @@ Main structure:
 
 ### Evidence
 
-System-default card branch:
+**Header always points Test shortcuts at Tempo** — `components/student/StudentDashboardHeader.tsx`:
 
-```33:72:components/StudentClassCard.tsx
-  const displayName = isSystemDefault ? DEFAULT_CLASS_NAME : className;
-  ...
-          isSystemDefault
-            ? {
-                background: `linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0.2)), url(${DEFAULT_CLASS_BANNER_URL}) center/cover`,
-              }
-            : { ... }
-  ...
-        {isSystemDefault && (
-          ...
-            <span className="px-2 py-0.5 bg-accent/10 text-accent font-bold text-[10px] uppercase rounded">
-              Available to all students
-            </span>
+```tsx
+          <JoinClassButton />
+          <TestShortcutsDropdown
+            simulationId={TEMPO_SIMULATION_ID}
+            classId={DEFAULT_CLASS_ID}
+          />
 ```
 
-Test dropdown Tempo stages:
+Constants (`lib/constants.ts`): `DEFAULT_CLASS_ID`, `DEFAULT_CLASS_NAME` (“Rehearse Essentials”), `DEFAULT_CLASS_BANNER_URL` (`/rehearse-essentials.png`), `TEMPO_SIMULATION_ID`.
 
-```18:24:app/student/dashboard/TestShortcutsDropdown.tsx
+**System-default card branch** — `components/StudentClassCard.tsx`:
+
+```tsx
+  const displayName = isSystemDefault ? DEFAULT_CLASS_NAME : className;
+
+  // Banner:
+  style={
+    isSystemDefault
+      ? {
+          background: `linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0.2)), url(${DEFAULT_CLASS_BANNER_URL}) center/cover`,
+        }
+      : { /* image or color-scheme gradient from class row */ }
+  }
+
+  // Badge (system default only):
+  {isSystemDefault && (
+    <div className="flex items-center gap-2 mb-2">
+      <span className="material-symbols-outlined text-accent text-[18px]" aria-hidden>
+        auto_awesome
+      </span>
+      <span className="px-2 py-0.5 bg-accent/10 text-accent font-bold text-[10px] uppercase rounded">
+        Available to all students
+      </span>
+    </div>
+  )}
+```
+
+**Test dropdown Tempo stages** — `app/student/dashboard/TestShortcutsDropdown.tsx`:
+
+```ts
 const TEST_STAGES = [
   { id: "prospecting", label: "Stage 1 — Prospecting" },
   { id: "discovery", label: "Stage 2 — Discovery" },
-  ...
+  { id: "presentation", label: "Stage 3 — Presentation" },
+  { id: "objections", label: "Stage 4 — Objections" },
+  { id: "negotiation", label: "Stage 5 — Negotiation" },
 ] as const;
+```
+
+**Sidebar default-class label** — `components/student/StudentSidebar.tsx`:
+
+```tsx
+              const label =
+                cls.classId === DEFAULT_CLASS_ID ? DEFAULT_CLASS_NAME : cls.className;
+              // icon: auto_awesome if DEFAULT_CLASS_ID, else folder
 ```
 
 ---
@@ -303,40 +371,42 @@ const TEST_STAGES = [
 
 | Control | Location | Behavior |
 |---------|----------|----------|
-| Logo / “Rehearse” | Header | `Link` → `/student/dashboard` |
+| Logo / “Rehearse” | Header | Link → `/student/dashboard` |
 | **Join a Class** | Header | Opens modal; submit → `POST /api/student/join-class` with `{ joinCode }`; on success toast + `router.refresh()` |
 | Modal Cancel / close / backdrop | Join modal | Closes modal, clears code/error |
-| **Test…** `<select>` | Header | Tempo-only: stages → full navigation to `/student/simulation/{TEMPO_ID}?classId={DEFAULT}&teststage=…` (clears prospecting/discovery localStorage for those stages); results/badges → `router.push` complete URL with `testresults` / `testbadges` |
+| **Test…** dropdown | Header | Tempo-only: stages → full navigation to `/student/simulation/{TEMPO_ID}?classId={DEFAULT}&teststage=…` (clears prospecting/discovery localStorage for those stages); results/badges → `router.push` complete URL with `testresults` / `testbadges` |
 | Display name / avatar | Header | Display only (not clickable) |
 | **Logout** | Header | `POST /api/student/logout` then `router.push("/student-login")` + refresh |
 | Sidebar collapse | Sidebar | Toggles width; persists `localStorage` key `rehearse-student-sidebar-collapsed` |
-| **My Classes** | Sidebar | `Link` → `/student/dashboard` |
-| Enrolled class row | Sidebar | `Link` → `/student/classes/{classId}` |
-| **StudentClassCard** | Main | `Link` → `/student/classes/{classId}` |
-| **View results** | History table | `Link` → `/student/simulation/{sim.id}/complete?attempt={row.id}` |
+| **My Classes** | Sidebar | Link → `/student/dashboard` |
+| Enrolled class row | Sidebar | Link → `/student/classes/{classId}` |
+| **StudentClassCard** | Main | Link → `/student/classes/{classId}` |
+| **View results** | History table | Link → `/student/simulation/{sim.id}/complete?attempt={row.id}` |
 
 No other buttons on the main dashboard body.
 
 ### Evidence
 
-Join Class API:
+**Join Class API** — `app/student/dashboard/JoinClassButton.tsx`:
 
-```34:51:app/student/dashboard/JoinClassButton.tsx
+```tsx
     const res = await fetch("/api/student/join-class", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ joinCode: joinCode.trim().toUpperCase() }),
     });
-    ...
+
+    const body = (await res.json()) as { error?: string; className?: string };
+    // on success:
     showToast(`Joined ${body.className ?? "class"}!`, "success");
     handleClose();
     router.refresh();
 ```
 
-Logout:
+**Logout** — `components/student/StudentDashboardHeader.tsx`:
 
-```28:31:components/student/StudentDashboardHeader.tsx
+```tsx
   const handleLogout = async (): Promise<void> => {
     await fetch("/api/student/logout", { method: "POST" });
     router.push("/student-login");
@@ -344,13 +414,20 @@ Logout:
   };
 ```
 
-Test stage navigation:
+**Test stage navigation** — `app/student/dashboard/TestShortcutsDropdown.tsx`:
 
-```60:62:app/student/dashboard/TestShortcutsDropdown.tsx
+```tsx
           window.location.assign(
             `/student/simulation/${simulationId}?classId=${classId}&teststage=${stage}`
           );
 ```
+
+Results / badges use `router.push` to `/student/simulation/${simulationId}/complete?classId=...&testresults=...` or `&testbadges=all`.
+
+**Class card / history links:**
+
+- `StudentClassCard` → `href={`/student/classes/${classId}`}`
+- History “View results” → `href={`/student/simulation/${sim.id}/complete?attempt=${row.id}`}`
 
 ---
 
@@ -362,10 +439,10 @@ Test stage navigation:
 |-------|-------------|
 | **Unauthenticated** | Layout and page both `redirect("/student-login")` if `getStudentSession()` is null |
 | **Loading** | No dedicated loading UI on the dashboard page — Next.js server render blocks until session + queries resolve. No `loading.tsx` was found under `app/student/dashboard/` during this audit. |
-| **Empty classes** | `EmptyState` with emoji 🎓, title “No classes yet.”, copy pointing to header Join a Class |
+| **Empty classes** | `EmptyState` with icon, title “No classes yet.”, copy pointing to header Join a Class |
 | **Populated classes** | Responsive grid `sm:grid-cols-2 lg:grid-cols-3` of cards |
 | **Empty history** | Paragraph in `card-surface`: “No completed simulations yet…” |
-| **Populated history** | Table (full width); not specially stacked for mobile in code — may scroll horizontally on narrow screens (not confirmed in browser) |
+| **Populated history** | Full-width table; no mobile-specific stack layout in code — may scroll horizontally on narrow screens (not confirmed in browser) |
 | **Sidebar** | Hidden below `md`; collapsible on desktop |
 | **Header user block** | Name/avatar `hidden md:flex`; logo text `hidden sm:inline` |
 
@@ -373,26 +450,35 @@ Join modal has its own loading (“Joining…”) and error states.
 
 ### Evidence
 
-Empty classes:
+**Empty classes** — `app/student/dashboard/page.tsx`:
 
-```72:77:app/student/dashboard/page.tsx
+```tsx
         {enrolledClasses.length === 0 ? (
           <EmptyState
             icon="🎓"
             title="No classes yet."
             description="Use Join a Class in the header with your professor's class code to get started."
           />
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* StudentClassCard list */}
+          </div>
+        )}
 ```
 
-Empty history:
+**Empty history** — `components/StudentAttemptHistory.tsx`:
 
-```29:34:components/StudentAttemptHistory.tsx
+```tsx
   if (attempts.length === 0) {
     return (
       <p className="text-sm text-text-secondary card-surface py-8 text-center mt-8">
         No completed simulations yet. Finish a scenario to see your scores here.
       </p>
+    );
+  }
 ```
+
+**Sidebar collapse persistence** — `components/student/StudentShellProvider.tsx` uses localStorage key `rehearse-student-sidebar-collapsed`.
 
 ---
 
@@ -418,37 +504,48 @@ System-default Essentials card uses hardcoded `#000000` for left border/score co
 
 ### Evidence (representative)
 
-Shell / main:
+**Shell / main** — `components/student/StudentPortalShell.tsx`:
 
-```42:48:components/student/StudentPortalShell.tsx
+```tsx
       <div className="fixed inset-0 z-40 flex flex-col bg-surface overflow-hidden font-body-md text-body-md text-on-surface">
-...
+        {/* header + sidebar */}
           <main className="flex-1 overflow-y-auto custom-scrollbar bg-surface">{children}</main>
 ```
 
-Header button tokens:
+**Header logout button** — `components/student/StudentDashboardHeader.tsx`:
 
-```73:77:components/student/StudentDashboardHeader.tsx
+```tsx
           <button
             type="button"
             onClick={() => void handleLogout()}
             className="px-4 h-10 border border-outline-variant text-primary font-label-md text-label-md rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-2 active:scale-95"
+          >
+            Logout
+          </button>
 ```
 
-History / legacy tokens:
+**History / legacy tokens** — `components/StudentAttemptHistory.tsx`:
 
-```38:44:components/StudentAttemptHistory.tsx
+```tsx
     <div className="mt-10">
       <h2 className="text-lg font-bold text-text-primary">My completed simulations</h2>
       <p className="text-sm text-text-secondary mt-1">Review scores and feedback from past runs.</p>
 
       <div className="mt-4 card-surface overflow-hidden">
+        <table className="w-full text-sm">
+          {/* Simulation / Completed / Score / Grade / View results */}
 ```
+
+Score cells hardcode `{row.total_score}/600`. Grade uses `scoreToGrade` + `toneTextClass(totalScoreTone(...))`.
 
 ---
 
 ## Notes / Gaps
 
 - Browser responsive behavior of the history **table** on small screens was not verified in a live browser for this audit — only CSS was inspected.
-- Score denominator `/600` in history is hardcoded in the table cell (`StudentAttemptHistory.tsx` line 67); origin of the 600 scale is outside this page’s queries.
+- Score denominator `/600` in history is hardcoded in the table cell (`StudentAttemptHistory.tsx`); origin of the 600 scale is outside this page’s queries.
 - Unauthenticated redirects still target `/student-login` (shim to unified `/login?role=student`); that is layout/page behavior, not dashboard UI content.
+
+---
+
+*End of audit — sections 1–7 complete.*
