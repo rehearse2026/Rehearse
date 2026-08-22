@@ -45,7 +45,7 @@ export function StudentPortalShell({
         )}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {!hideSidebar && <StudentSidebar enrolledClasses={enrolledClasses} />}
-          <main className="flex-1 overflow-y-auto custom-scrollbar bg-surface">{children}</main>
+          <main className="flex-1 overflow-y-auto custom-scrollbar bg-background">{children}</main>
         </div>
       </div>
     </StudentShellProvider>

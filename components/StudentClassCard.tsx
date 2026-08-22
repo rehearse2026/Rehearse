@@ -1,10 +1,15 @@
 /**
  * StudentClassCard.tsx
- * Clickable class card on the student dashboard — matches professor appearance settings.
+ * Clickable class card on the student dashboard — Stitch visual treatment.
  */
 
 import Link from "next/link";
-import { DEFAULT_CLASS_BANNER_URL, DEFAULT_CLASS_DESCRIPTION, DEFAULT_CLASS_NAME } from "@/lib/constants";
+import type { CSSProperties } from "react";
+import {
+  DEFAULT_CLASS_BANNER_URL,
+  DEFAULT_CLASS_DESCRIPTION,
+  DEFAULT_CLASS_NAME,
+} from "@/lib/constants";
 import { resolveClassColorScheme } from "@/lib/class-appearance";
 import type { ClassColorSchemeId } from "@/types";
 
@@ -33,61 +38,64 @@ export function StudentClassCard({
   const scheme = resolveClassColorScheme(cardColorScheme);
   const image = cardImageUrl?.trim() || null;
   const displayName = isSystemDefault ? DEFAULT_CLASS_NAME : className;
+  const subtitle = isSystemDefault ? DEFAULT_CLASS_DESCRIPTION : description?.trim() || null;
+  const simLabel =
+    simulationCount === 0
+      ? "No simulations yet"
+      : `${simulationCount} simulation${simulationCount === 1 ? "" : "s"}`;
+
+  const bannerStyle: CSSProperties = isSystemDefault
+    ? {
+        backgroundImage: `url(${DEFAULT_CLASS_BANNER_URL})`,
+      }
+    : image
+      ? {
+          backgroundImage: `linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0.15)), url(${image})`,
+        }
+      : {
+          backgroundImage: `linear-gradient(135deg, ${scheme.gradientFrom}, ${scheme.gradientTo})`,
+        };
 
   return (
     <Link
       href={`/student/classes/${classId}`}
-      className="flex h-full flex-col rounded-xl overflow-hidden border border-border bg-page shadow-sm hover:shadow-md transition-shadow duration-150 group"
+      className={`bg-surface-container-lowest rounded-xl border-l-4 border border-outline-variant shadow-sm overflow-hidden flex flex-col group cursor-pointer hover:shadow-md hover:border-r-outline hover:border-y-outline transition-all ${
+        isSystemDefault ? "border-l-primary" : ""
+      }`}
+      style={isSystemDefault ? undefined : { borderLeftColor: scheme.accent }}
     >
-      <div
-        className="relative min-h-[140px] shrink-0 flex items-end px-5 py-5"
-        style={
-          isSystemDefault
-            ? {
-                background: `linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0.2)), url(${DEFAULT_CLASS_BANNER_URL}) center/cover`,
-              }
-            : {
-                background: image
-                  ? `linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0.2)), url(${image}) center/cover`
-                  : `linear-gradient(135deg, ${scheme.gradientFrom}, ${scheme.gradientTo})`,
-              }
-        }
-      >
-        <h2 className="text-xl font-bold text-white drop-shadow-sm group-hover:underline decoration-white/80">
-          {displayName}
-        </h2>
-      </div>
-      <div
-        className="flex flex-1 flex-col px-5 py-4 border-l-4 bg-surface"
-        style={{ borderLeftColor: isSystemDefault ? "#000000" : scheme.accent }}
-      >
+      <div className="relative h-24 w-full bg-cover bg-center" style={bannerStyle}>
         {isSystemDefault && (
-          <div className="flex items-center gap-2 mb-2">
-            <span className="material-symbols-outlined text-accent text-[18px]" aria-hidden>
-              auto_awesome
-            </span>
-            <span className="px-2 py-0.5 bg-accent/10 text-accent font-bold text-[10px] uppercase rounded">
-              Available to all students
-            </span>
-          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-primary-container/80 to-transparent" />
         )}
-        {(isSystemDefault || description) && (
-          <p className="text-sm text-text-secondary line-clamp-2 mb-2">
-            {isSystemDefault ? DEFAULT_CLASS_DESCRIPTION : description}
+        {isSystemDefault && (
+          <span className="absolute bottom-2 left-2 bg-surface/20 text-on-primary font-label-sm text-label-sm px-2 py-1 rounded-xl backdrop-blur-sm">
+            Available to all students
+          </span>
+        )}
+      </div>
+
+      <div className="p-4 flex-1 flex flex-col">
+        <h3 className="font-headline-md text-headline-md text-on-surface">{displayName}</h3>
+        {subtitle && (
+          <p className="font-body-md text-body-md text-on-surface-variant mt-1 line-clamp-2">
+            {subtitle}
           </p>
         )}
-        <div className="mt-auto pt-2">
-          <p
-            className="text-sm font-medium"
-            style={{ color: isSystemDefault ? "#000000" : scheme.accent }}
+
+        <div className="mt-auto pt-4 flex items-end justify-between gap-2">
+          <span className="inline-flex items-center font-label-sm text-label-sm px-2 py-1 rounded-lg bg-surface-container text-on-surface-variant">
+            {simLabel}
+          </span>
+          <span
+            className={`material-symbols-outlined text-[20px] opacity-0 group-hover:opacity-100 transition-opacity ${
+              isSystemDefault ? "text-primary" : ""
+            }`}
+            style={isSystemDefault ? undefined : { color: scheme.accent }}
+            aria-hidden
           >
-            {simulationCount === 0
-              ? "No simulations yet"
-              : `${simulationCount} simulation${simulationCount === 1 ? "" : "s"}`}
-          </p>
-          <p className="text-xs text-text-secondary mt-2 group-hover:text-text-primary transition-colors">
-            Open class →
-          </p>
+            arrow_forward
+          </span>
         </div>
       </div>
     </Link>

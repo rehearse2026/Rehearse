@@ -1,6 +1,6 @@
 /**
  * StudentDashboardHeader.tsx
- * Top app bar for the student portal — matches professor header styling.
+ * Top app bar for the student portal — Stitch visual treatment.
  */
 
 "use client";
@@ -39,43 +39,50 @@ export function StudentDashboardHeader({
         : `${classCount} classes enrolled`;
 
   return (
-    <header className="bg-surface-container-lowest border-b border-outline-variant shrink-0 z-50">
-      <div className="flex justify-between items-center w-full pl-4 pr-4 sm:pl-6 sm:pr-6 h-16">
+    <header className="bg-surface-container-lowest h-16 w-full shrink-0 z-50 shadow-sm border-b border-outline-variant">
+      <div className="flex justify-between items-center w-full h-16 px-4 sm:px-8">
         <Link
           href="/student/dashboard"
-          className="flex items-center gap-2 font-headline-lg text-headline-lg font-bold text-primary"
+          className="flex items-center gap-2 font-headline-lg text-headline-lg text-on-surface"
         >
           <img
             src="/pitchlab-logo-new.png"
             alt="Rehearse logo"
-            className="h-[1.5em] w-auto shrink-0"
+            className="h-7 w-auto shrink-0"
           />
           <span className="hidden sm:inline">Rehearse</span>
         </Link>
 
         <div className="flex items-center gap-3 sm:gap-4">
           <JoinClassButton />
-          <TestShortcutsDropdown
-            simulationId={TEMPO_SIMULATION_ID}
-            classId={DEFAULT_CLASS_ID}
-          />
-          <div className="hidden md:flex items-center gap-3 pr-4 border-r border-outline-variant">
-            <div className="text-right">
-              <p className="font-label-md text-label-md font-bold text-primary">{displayName}</p>
-              <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">
-                {subtitle}
-              </p>
+
+          <div className="flex items-center gap-2 sm:gap-3 border-l border-outline-variant pl-3 sm:pl-4">
+            <div className="hidden md:block text-right">
+              <p className="font-label-md text-label-md text-on-surface">{displayName}</p>
+              <p className="font-label-sm text-label-sm text-on-surface-variant">{subtitle}</p>
             </div>
-            <div className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold text-sm">
+            <div
+              className="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold text-sm border border-outline-variant shrink-0"
+              aria-hidden
+            >
               {displayName.charAt(0).toUpperCase()}
             </div>
           </div>
+
+          <TestShortcutsDropdown
+            simulationId={TEMPO_SIMULATION_ID}
+            classId={DEFAULT_CLASS_ID}
+            compact
+          />
+
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="px-4 h-10 border border-outline-variant text-primary font-label-md text-label-md rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-2 active:scale-95"
+            className="text-on-surface-variant hover:text-secondary transition-colors hover:bg-on-primary-container/10 p-1 rounded-xl duration-300"
+            aria-label="Logout"
+            title="Logout"
           >
-            Logout
+            <span className="material-symbols-outlined">logout</span>
           </button>
         </div>
       </div>

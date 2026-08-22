@@ -6,6 +6,7 @@
 "use client";
 
 import Link from "next/link";
+import { EmptyState } from "@/components/EmptyState";
 import { scoreToGrade } from "@/lib/grades";
 import { totalScoreTone, toneTextClass } from "@/lib/score-display";
 
@@ -28,53 +29,85 @@ export function StudentAttemptHistory({
 }: StudentAttemptHistoryProps): React.ReactElement {
   if (attempts.length === 0) {
     return (
-      <p className="text-sm text-text-secondary card-surface py-8 text-center mt-8">
-        No completed simulations yet. Finish a scenario to see your scores here.
-      </p>
+      <section className="mt-8">
+        <h2 className="font-headline-lg text-headline-lg text-on-surface mb-4">
+          My completed simulations
+        </h2>
+        <EmptyState
+          icon=""
+          title="No completed simulations yet. Finish a scenario to see your scores here."
+        />
+      </section>
     );
   }
 
   return (
-    <div className="mt-10">
-      <h2 className="text-lg font-bold text-text-primary">My completed simulations</h2>
-      <p className="text-sm text-text-secondary mt-1">Review scores and feedback from past runs.</p>
+    <section>
+      <h2 className="font-headline-lg text-headline-lg text-on-surface mb-4">
+        My completed simulations
+      </h2>
 
-      <div className="mt-4 card-surface overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-surface text-left text-text-secondary border-b border-border">
-            <tr>
-              <th className="px-4 py-3 font-medium">Simulation</th>
-              <th className="px-4 py-3 font-medium">Completed</th>
-              <th className="px-4 py-3 font-medium">Score</th>
-              <th className="px-4 py-3 font-medium">Grade</th>
-              <th className="px-4 py-3 font-medium" />
+      <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm overflow-hidden">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-outline-variant bg-surface-container-low">
+              <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">
+                Simulation
+              </th>
+              <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">
+                Score
+              </th>
+              <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">
+                Completion Date
+              </th>
+              <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant">
+                Grade
+              </th>
+              <th className="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant text-right">
+                Action
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-outline-variant">
             {attempts.map((row) => {
               const sim = row.simulations;
               const completedLabel = row.completed_at
-                ? new Date(row.completed_at).toLocaleDateString()
+                ? new Date(row.completed_at).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
                 : "—";
               const tone = totalScoreTone(row.total_score);
               return (
-                <tr key={row.id} className="border-t border-border hover:bg-surface/50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-text-primary">{sim?.title ?? "Simulation"}</p>
-                    <p className="text-xs text-text-secondary">{sim?.persona_name}</p>
+                <tr
+                  key={row.id}
+                  className="hover:bg-surface-container-lowest/50 transition-colors"
+                >
+                  <td className="py-3 px-4 font-body-md text-body-md text-on-surface font-medium">
+                    <p>{sim?.title ?? "Simulation"}</p>
+                    {sim?.persona_name && (
+                      <p className="font-label-sm text-label-sm text-on-surface-variant font-normal">
+                        {sim.persona_name}
+                      </p>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-text-secondary">{completedLabel}</td>
-                  <td className="px-4 py-3">{row.total_score}/600</td>
-                  <td className={`px-4 py-3 font-semibold ${toneTextClass(tone)}`}>
+                  <td className="py-3 px-4 font-code-md text-code-md text-on-surface">
+                    {row.total_score}/600
+                  </td>
+                  <td className="py-3 px-4 font-body-md text-body-md text-on-surface-variant">
+                    {completedLabel}
+                  </td>
+                  <td className={`py-3 px-4 font-label-md text-label-md font-semibold ${toneTextClass(tone)}`}>
                     {scoreToGrade(row.total_score)}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="py-3 px-4 text-right">
                     {sim && (
                       <Link
                         href={`/student/simulation/${sim.id}/complete?attempt=${row.id}`}
-                        className="text-accent font-medium hover:underline"
+                        className="inline-block font-label-md text-label-md text-secondary hover:bg-secondary/10 px-2 py-1 rounded-xl transition-all duration-300"
                       >
-                        View results
+                        View Results
                       </Link>
                     )}
                   </td>
@@ -84,6 +117,6 @@ export function StudentAttemptHistory({
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   );
 }

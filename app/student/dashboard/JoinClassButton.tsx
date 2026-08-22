@@ -56,7 +56,7 @@ export function JoinClassButton(): React.ReactElement {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="h-10 px-4 border border-outline-variant text-on-surface font-bold rounded-lg hover:bg-surface-container transition-colors whitespace-nowrap text-label-md"
+        className="bg-primary-container text-on-primary px-4 h-10 rounded-xl font-label-md text-label-md hover:bg-primary-container/90 transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap"
       >
         Join a Class
       </button>
