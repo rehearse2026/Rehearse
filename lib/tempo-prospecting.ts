@@ -5,6 +5,7 @@
  */
 
 import type { ChatMessage } from "@/types";
+import { parseProspectingIcpState } from "@/lib/tempo-icp-criteria";
 import { hasProspectingResearchActivity } from "@/lib/tempo-prospect-directory";
 
 export type ProspectingStepId = "research" | "select_lead" | "opening";
@@ -226,6 +227,8 @@ export function normalizeProspectingWizardState(
       ? companyChats[selectedCompanyId]
       : legacyMessages;
 
+  const icpRecord = parseProspectingIcpState(anyRaw.icp);
+
   return {
     ...DEFAULT_PROSPECTING_WIZARD_STATE,
     chatMessages: activeMessages,
@@ -243,11 +246,8 @@ export function normalizeProspectingWizardState(
     prospectingHandoffSeen: Boolean(anyRaw.prospectingHandoffSeen),
     selectedLeadId,
     currentStep: step,
-    icpGateComplete:
-      anyRaw.icpGateComplete === true ||
-      (typeof anyRaw.icp === "object" &&
-        anyRaw.icp !== null &&
-        (anyRaw.icp as { feedbackSeen?: unknown }).feedbackSeen === true),
+    /** Only skip the ICP gate after manager feedback Continue (persisted on stage_data.icp). */
+    icpGateComplete: icpRecord?.feedbackSeen === true,
   };
 }
 

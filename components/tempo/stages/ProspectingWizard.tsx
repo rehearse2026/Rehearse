@@ -53,7 +53,10 @@ export function ProspectingWizard({
   const prospectingMeta = TEMPO_HANDOFF_STAGE_META.prospecting;
   const discoveryMeta = TEMPO_HANDOFF_STAGE_META.discovery;
   const showProspectingHandoff =
-    !wizard.isLoading && (!state.prospectingHandoffSeen || forceHandoffOpen) && !postSubmitHandoff;
+    state.icpGateComplete &&
+    !wizard.isLoading &&
+    (!state.prospectingHandoffSeen || forceHandoffOpen) &&
+    !postSubmitHandoff;
 
   if (wizard.isLoading) {
     return (
@@ -174,6 +177,20 @@ export function ProspectingWizard({
           </div>
 
           <nav className="flex-1 p-md mt-md overflow-y-auto">
+            <div className="flex gap-md">
+              <div className="flex flex-col items-center shrink-0">
+                <div className="z-10 w-6 h-6 rounded-full flex items-center justify-center font-code-md shrink-0 text-xs bg-tertiary-container text-on-tertiary-fixed">
+                  <MaterialIcon name="check" className="text-[14px]" />
+                </div>
+                <div className="w-0.5 h-12 mt-2 mb-1 shrink-0 bg-tertiary-container" />
+              </div>
+              <div className="pt-0.5 min-w-0 pb-5">
+                <h3 className="font-label-md text-label-md text-on-primary-container">
+                  Define Your ICP
+                </h3>
+                <p className="text-label-sm text-on-primary-container/70">Completed</p>
+              </div>
+            </div>
             {PROSPECTING_STEPS.map((step, index) => {
               const isCompleted = index < currentStep;
               const isActive = index === currentStep;

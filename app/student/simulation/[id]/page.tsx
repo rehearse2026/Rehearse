@@ -168,18 +168,16 @@ export default async function StudentSimulationPage({
     const stageData =
       ((attempt as unknown as { stage_data?: Record<string, unknown> | null }).stage_data ??
         {}) as Record<string, unknown>;
-    if (stageData.icp || stageData.icpGateComplete === true) {
-      const nextStageData = stripIcpFromStageData(stageData);
-      const { error: icpResetError } = await supabase
-        .from("attempts")
-        .update({ stage_data: nextStageData })
-        .eq("id", attempt.id);
-      if (!icpResetError) {
-        attempt = {
-          ...attempt,
-          stage_data: nextStageData,
-        } as unknown as Attempt;
-      }
+    const nextStageData = stripIcpFromStageData(stageData);
+    const { error: icpResetError } = await supabase
+      .from("attempts")
+      .update({ stage_data: nextStageData })
+      .eq("id", attempt.id);
+    if (!icpResetError) {
+      attempt = {
+        ...attempt,
+        stage_data: nextStageData,
+      } as unknown as Attempt;
     }
   }
 
