@@ -168,7 +168,11 @@ export default async function StudentClassPage({
               // Match Tempo entry fresh-start rules: an in_progress row at
               // lead_gen with no stage_data means the student has not begun.
               const currentStage = existing?.current_stage ?? null;
-              const hasStartedStageOne = Boolean(existing?.stage_data);
+              const stageData = existing
+                ? (existing as unknown as { stage_data?: Record<string, unknown> | null })
+                    .stage_data
+                : null;
+              const hasStartedStageOne = Boolean(stageData);
               const hasStarted =
                 Boolean(existing) &&
                 currentStage !== null &&
