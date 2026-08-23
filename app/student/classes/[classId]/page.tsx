@@ -16,7 +16,7 @@ import {
   DEFAULT_CLASS_NAME,
 } from "@/lib/constants";
 import { loadStudentClassDetail } from "@/lib/student-class-data";
-import { attemptHasStartedProgress } from "@/lib/attempt-progress";
+import { attemptHasStartedProgress, pickPreferredInProgressAttempt } from "@/lib/attempt-progress";
 import { isTempoDefaultSimulation } from "@/lib/tempo-simulation";
 import { getStudentSession } from "@/lib/student-session";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -65,9 +65,23 @@ export default async function StudentClassPage({
   }
 
   const attemptBySim = new Map<string, Attempt>();
+  const attemptsBySimId = new Map<string, Attempt[]>();
   for (const attempt of inProgressList) {
-    attemptBySim.set(attempt.simulation_id, attempt);
+    const list = attemptsBySimId.get(attempt.simulation_id) ?? [];
+    list.push(attempt);
+    attemptsBySimId.set(attempt.simulation_id, list);
   }
+  Array.from(attemptsBySimId.entries()).forEach(([simId, list]) => {
+    const preferred = pickPreferredInProgressAttempt(
+      list.map((row) => ({
+        ...row,
+        stage_data: (row as unknown as { stage_data?: unknown }).stage_data,
+      }))
+    );
+    if (preferred) {
+      attemptBySim.set(simId, preferred as Attempt);
+    }
+  });
 
   const isDefaultClass = params.classId === DEFAULT_CLASS_ID;
   const displayDescription = isDefaultClass

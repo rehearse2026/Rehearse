@@ -12,6 +12,7 @@ import { PresentationStage } from "@/components/tempo/stages/PresentationStage";
 import { ProspectingWizard } from "@/components/tempo/stages/ProspectingWizard";
 import { SimulationRunner } from "@/components/SimulationRunner";
 import { ATTEMPT_STATUS, DEFAULT_CLASS_ID } from "@/lib/constants";
+import { pickPreferredInProgressAttempt } from "@/lib/attempt-progress";
 import { parseDiscoverySummaryFromTranscript, parsePresentationFormFromTranscript } from "@/lib/tempo-presentation";
 import { parseObjectionSummaryFromTranscript } from "@/lib/tempo-negotiation";
 import { parseProspectingIcpState } from "@/lib/tempo-icp-criteria";
@@ -105,9 +106,15 @@ export default async function StudentSimulationPage({
       .eq("class_id", classId)
       .eq("status", ATTEMPT_STATUS.IN_PROGRESS)
       .order("started_at", { ascending: false })
-      .limit(1);
+      .limit(20);
 
-    const existing = existingRows?.[0] ?? null;
+    const existing = pickPreferredInProgressAttempt(
+      (existingRows ?? []) as Array<{
+        current_stage?: string | null;
+        stage_data?: unknown;
+        started_at?: string | null;
+      }>
+    );
 
     if (existing) {
       attempt = existing as Attempt;

@@ -17,7 +17,10 @@ import {
   getCurrentTempoStage,
   isTempoDefaultSimulation,
 } from "@/lib/tempo-simulation";
-import { attemptHasStartedProgress } from "@/lib/attempt-progress";
+import {
+  attemptHasStartedProgress,
+  pickPreferredInProgressAttempt,
+} from "@/lib/attempt-progress";
 import { getStudentSession } from "@/lib/student-session";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { SimulationStage } from "@/types";
@@ -85,6 +88,7 @@ export default async function TempoSimulationEntryPage({
     redirect("/student/dashboard");
   }
 
+  // Prefer an attempt that already has ICP/wizard progress over a blank newer shell.
   const { data: inProgressRows } = await supabase
     .from("attempts")
     .select("id, status, current_stage, total_score, stage_data, started_at")
@@ -93,9 +97,9 @@ export default async function TempoSimulationEntryPage({
     .eq("class_id", classId)
     .eq("status", "in_progress")
     .order("started_at", { ascending: false })
-    .limit(1);
+    .limit(20);
 
-  let inProgressAttempt = inProgressRows?.[0] ?? null;
+  let inProgressAttempt = pickPreferredInProgressAttempt(inProgressRows);
 
   if (!inProgressAttempt && searchParams.new === "1") {
     const { data: created } = await supabase
@@ -116,15 +120,12 @@ export default async function TempoSimulationEntryPage({
   const currentStage = (inProgressAttempt?.current_stage as SimulationStage | undefined) ?? null;
 
   if (currentStage === "results" && inProgressAttempt) {
-    redirect(`/student/simulation/${params.id}/complete?classId=${classId}&attempt=${inProgressAttempt.id}`);
+    redirect(
+      `/student/simulation/${params.id}/complete?classId=${classId}&attempt=${inProgressAttempt.id}`
+    );
   }
 
-  // Stage 1 keeps current_stage at "lead_gen" until completion — detect ICP / wizard
-  // progress from stage_data (and stage_scores) rather than Boolean(stage_data) alone.
   const stageData = (inProgressAttempt?.stage_data ?? null) as Record<string, unknown> | null;
-  // Until the student clicks "Begin Stage 2" on the Discovery handoff, they are
-  // still wrapping up Stage 1 (required CRM fields), so keep the entry screen
-  // presenting Stage 1 rather than jumping ahead to Stage 2.
   const discoveryHandoffSeen = stageData?.discoveryHandoffSeen === true;
   const displayStage: SimulationStage | null =
     currentStage === "discovery" && !discoveryHandoffSeen ? "prospecting" : currentStage;
@@ -151,7 +152,6 @@ export default async function TempoSimulationEntryPage({
   }
 
   if (displayStage === "prospecting" && currentStage === "discovery") {
-    // Presenting Stage 1 as still in progress; keep the roadmap consistent.
     completedStageKeys.delete("prospecting");
   }
 
@@ -170,17 +170,16 @@ export default async function TempoSimulationEntryPage({
     (IN_PROGRESS_STAGES.includes(currentStage) ||
       (currentStage === "lead_gen" && hasStartedStageOne));
 
+  // Resume the attempt that has progress (not a blank shell).
   const ctaHref = buildTempoEntryCtaHref(
     params.id,
     classId,
     attemptId,
-    hasInProgressAttempt
+    hasStartedStageOne || (hasInProgressAttempt && currentStage !== "lead_gen")
   );
 
   if (isFreshStart) {
-    return (
-      <TempoEntryFreshStart classId={classId} ctaHref={ctaHref} />
-    );
+    return <TempoEntryFreshStart classId={classId} ctaHref={ctaHref} />;
   }
 
   if (isMidSimulation && displayStage) {

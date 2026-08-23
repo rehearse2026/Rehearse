@@ -53,10 +53,9 @@ export function ProspectingWizard({
   const discoveryMeta = TEMPO_HANDOFF_STAGE_META.discovery;
   const icpComplete = wizard.icpState?.feedbackSeen === true || state.icpGateComplete;
   const showProspectingHandoff =
-    icpComplete &&
     !wizard.isLoading &&
-    (!state.prospectingHandoffSeen || forceHandoffOpen) &&
-    !postSubmitHandoff;
+    !postSubmitHandoff &&
+    (forceHandoffOpen || (!state.prospectingHandoffSeen && !icpComplete));
 
   if (wizard.isLoading) {
     return (
