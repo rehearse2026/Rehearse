@@ -165,15 +165,24 @@ export default async function StudentClassPage({
                 ? `/student/simulation/${sim.id}/entry?classId=${params.classId}`
                 : `/student/simulation/${sim.id}?${query.toString()}`;
 
+              // Match Tempo entry fresh-start rules: an in_progress row at
+              // lead_gen with no stage_data means the student has not begun.
+              const currentStage = existing?.current_stage ?? null;
+              const hasStartedStageOne = Boolean(existing?.stage_data);
+              const hasStarted =
+                Boolean(existing) &&
+                currentStage !== null &&
+                !(currentStage === "lead_gen" && !hasStartedStageOne);
+
               return (
                 <SimulationCard
                   key={sim.id}
                   simulation={sim}
                   accentColor={isDefaultClass ? "#00000b" : classDetail.accentColor}
-                  actionLabel={existing ? "Continue" : "Start Simulation"}
+                  actionLabel={hasStarted ? "Continue" : "Start Simulation"}
                   href={href}
-                  stagesCompleted={stagesCompleted}
-                  inProgress={Boolean(existing)}
+                  stagesCompleted={hasStarted ? stagesCompleted : 0}
+                  inProgress={hasStarted}
                 />
               );
             })}
