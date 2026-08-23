@@ -265,15 +265,13 @@ export function ProspectingWizard({
               currentStep={currentStep}
               attemptId={attemptId}
               state={state}
-              chatInput={wizard.chatInput}
-              isAILoading={wizard.isAILoading}
               wordCount={wizard.wordCount}
-              onChatInputChange={wizard.setChatInput}
-              onSendMessage={() => void wizard.handleSendMessage()}
               onSelectCompany={wizard.selectDirectoryCompany}
-              onCompaniesLoaded={wizard.setDirectoryCompanies}
+              onShortlistChange={wizard.setShortlistedCompanyIds}
               onFieldChange={wizard.updateField}
               onLeadSelected={(leadId) => wizard.completeLeadSelection(leadId)}
+              onResearchContinue={() => void handleNext()}
+              canResearchContinue={wizard.canProceed}
               icpState={wizard.icpState}
               onIcpComplete={wizard.completeIcpGate}
             />

@@ -1,16 +1,15 @@
 /**
  * ProspectingStepPanels.tsx
  * Step content panels for the Tempo Stage 1 Prospecting wizard.
- * Steps: Company Directory → Select Target Lead → Opening Message.
+ * Steps: Data Room → Select Target Lead → Opening Message.
  */
 
 "use client";
 
-import { ProspectingCompanyDirectory } from "@/components/tempo/stages/ProspectingCompanyDirectory";
+import { ProspectingDataRoom } from "@/components/tempo/stages/ProspectingDataRoom";
 import { ProspectingIcpStep } from "@/components/tempo/stages/ProspectingIcpStep";
 import { ProspectingLeadSelectionStep } from "@/components/tempo/stages/ProspectingLeadSelectionStep";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
-import type { ProspectDirectoryCompany } from "@/lib/tempo-prospect-directory";
 import type { ProspectingIcpState } from "@/lib/tempo-icp-criteria";
 import {
   OPENING_MESSAGE_TIPS,
@@ -21,18 +20,16 @@ type StepPanelsProps = {
   currentStep: number;
   attemptId: string;
   state: ProspectingWizardState;
-  chatInput: string;
-  isAILoading: boolean;
   wordCount: number;
-  onChatInputChange: (value: string) => void;
-  onSendMessage: () => void;
   onSelectCompany: (companyId: string) => void;
-  onCompaniesLoaded: (companies: ProspectDirectoryCompany[]) => void;
+  onShortlistChange: (companyIds: string[]) => void;
   onFieldChange: <K extends keyof ProspectingWizardState>(
     key: K,
     value: ProspectingWizardState[K]
   ) => void;
   onLeadSelected: (leadId: string) => Promise<void>;
+  onResearchContinue?: () => void;
+  canResearchContinue?: boolean;
   icpState: ProspectingIcpState | null;
   onIcpComplete: (icp: ProspectingIcpState) => void;
 };
@@ -44,15 +41,13 @@ export function ProspectingStepPanels({
   currentStep,
   attemptId,
   state,
-  chatInput,
-  isAILoading,
   wordCount,
-  onChatInputChange,
-  onSendMessage,
   onSelectCompany,
-  onCompaniesLoaded,
+  onShortlistChange,
   onFieldChange,
   onLeadSelected,
+  onResearchContinue,
+  canResearchContinue = false,
   icpState,
   onIcpComplete,
 }: StepPanelsProps): React.ReactElement {
@@ -78,16 +73,13 @@ export function ProspectingStepPanels({
 
   if (currentStep === 1) {
     return (
-      <ProspectingCompanyDirectory
+      <ProspectingDataRoom
         attemptId={attemptId}
         selectedCompanyId={state.selectedCompanyId}
-        companyChats={state.companyChats}
-        chatInput={chatInput}
-        isAILoading={isAILoading}
         onSelectCompany={onSelectCompany}
-        onChatInputChange={onChatInputChange}
-        onSendMessage={onSendMessage}
-        onCompaniesLoaded={onCompaniesLoaded}
+        onShortlistChange={onShortlistChange}
+        onContinue={onResearchContinue}
+        canContinue={canResearchContinue}
       />
     );
   }

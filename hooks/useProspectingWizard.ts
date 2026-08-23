@@ -47,6 +47,8 @@ type UseProspectingWizardResult = {
   ) => void;
   selectDirectoryCompany: (companyId: string) => void;
   setDirectoryCompanies: (companies: ProspectDirectoryCompany[]) => void;
+  /** Syncs Data Room shortlist company ids for step-advance gating. */
+  setShortlistedCompanyIds: (companyIds: string[]) => void;
   toggleSelfCheck: (id: string, checked: boolean) => void;
   canProceed: boolean;
   canSubmit: boolean;
@@ -203,6 +205,26 @@ export function useProspectingWizard({
           return prev;
         }
         const next = { ...prev, directoryCompanyIds: ids };
+        void persistState(next);
+        return next;
+      });
+    },
+    [persistState]
+  );
+
+  /**
+   * Syncs Data Room shortlist company ids used by canAdvanceProspectingStep.
+   */
+  const setShortlistedCompanyIds = useCallback(
+    (companyIds: string[]): void => {
+      setState((prev) => {
+        if (
+          prev.shortlistedCompanyIds.length === companyIds.length &&
+          prev.shortlistedCompanyIds.every((id, i) => id === companyIds[i])
+        ) {
+          return prev;
+        }
+        const next = { ...prev, shortlistedCompanyIds: companyIds };
         void persistState(next);
         return next;
       });
@@ -411,6 +433,7 @@ export function useProspectingWizard({
     updateField,
     selectDirectoryCompany,
     setDirectoryCompanies,
+    setShortlistedCompanyIds,
     toggleSelfCheck,
     canProceed,
     canSubmit,

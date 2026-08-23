@@ -6,7 +6,6 @@
 
 import type { ChatMessage } from "@/types";
 import { parseProspectingIcpState } from "@/lib/tempo-icp-criteria";
-import { hasProspectingResearchActivity } from "@/lib/tempo-prospect-directory";
 
 export type ProspectingStepId = "icp" | "research" | "select_lead" | "opening";
 
@@ -18,7 +17,11 @@ export type ProspectingStepDefinition = {
 
 export const PROSPECTING_STEPS: readonly ProspectingStepDefinition[] = [
   { id: "icp", label: "Define Your ICP", description: "Who is Tempo for?" },
-  { id: "research", label: "Company Directory", description: "Research candidate companies" },
+  {
+    id: "research",
+    label: "Data Room",
+    description: "Review documents and shortlist three accounts",
+  },
   {
     id: "select_lead",
     label: "Select Target Lead",
@@ -137,8 +140,10 @@ export type ProspectingWizardState = {
   companyChats: Record<string, ChatMessage[]>;
   /** Currently selected directory company — null until the student clicks one. */
   selectedCompanyId: string | null;
-  /** Cached directory order for this attempt (set after first directory load). */
+  /** Cached directory / Data Room order for this attempt. */
   directoryCompanyIds: string[];
+  /** Data Room shortlist — directory company ids with status=shortlisted leads. */
+  shortlistedCompanyIds: string[];
   openingMessage: string;
   selfCheck: Record<string, boolean>;
   stretchOpen: boolean;
@@ -162,6 +167,7 @@ export const DEFAULT_PROSPECTING_WIZARD_STATE: ProspectingWizardState = {
   companyChats: {},
   selectedCompanyId: null,
   directoryCompanyIds: [],
+  shortlistedCompanyIds: [],
   openingMessage: "",
   selfCheck: {},
   stretchOpen: false,
@@ -211,6 +217,10 @@ export function normalizeProspectingWizardState(
     ? anyRaw.directoryCompanyIds.filter((id): id is string => typeof id === "string")
     : [];
 
+  const shortlistedCompanyIds = Array.isArray(anyRaw.shortlistedCompanyIds)
+    ? anyRaw.shortlistedCompanyIds.filter((id): id is string => typeof id === "string")
+    : [];
+
   const companyChats: Record<string, ChatMessage[]> =
     anyRaw.companyChats && typeof anyRaw.companyChats === "object"
       ? (anyRaw.companyChats as Record<string, ChatMessage[]>)
@@ -245,6 +255,7 @@ export function normalizeProspectingWizardState(
     companyChats,
     selectedCompanyId,
     directoryCompanyIds,
+    shortlistedCompanyIds,
     openingMessage: typeof anyRaw.openingMessage === "string" ? anyRaw.openingMessage : "",
     selfCheck:
       anyRaw.selfCheck && typeof anyRaw.selfCheck === "object"
@@ -384,7 +395,7 @@ export function countWords(text: string): number {
 
 /**
  * Returns whether the student can advance from the current wizard step.
- * Indices: ICP (0) → Company Directory (1) → Lead Selection (2) → Opening (3).
+ * Indices: ICP (0) → Data Room (1) → Lead Selection (2) → Opening (3).
  */
 export function canAdvanceProspectingStep(
   stepIndex: number,
@@ -394,7 +405,7 @@ export function canAdvanceProspectingStep(
     case 0:
       return state.icpGateComplete;
     case 1:
-      return hasProspectingResearchActivity(state.companyChats);
+      return state.shortlistedCompanyIds.length === 3;
     case 2:
       return Boolean(state.selectedLeadId);
     case 3:

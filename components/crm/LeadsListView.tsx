@@ -32,6 +32,13 @@ function StatusBadge({ status }: { status: CrmLead["status"] }): React.ReactElem
       </span>
     );
   }
+  if (status === "shortlisted") {
+    return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full bg-[#ffdcc1] text-[#6c3a00] text-[10px] font-bold uppercase tracking-widest">
+        Shortlisted
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center px-2 py-1 rounded-full bg-[#e3eae6] text-[#404848] text-[10px] font-bold uppercase tracking-widest">
       New

@@ -17,6 +17,9 @@ type CreateLeadBody = {
   whyFit?: string;
   trigger?: string;
   nextStep?: string;
+  decisionMakerRationale?: string;
+  /** Defaults to "new". Data Room shortlist creates "shortlisted". */
+  status?: "new" | "shortlisted";
 };
 
 /**
@@ -40,6 +43,16 @@ async function loadOwnedAttempt(
  * Maps a crm_leads row to the API CrmLead shape.
  */
 function mapLeadRow(row: Record<string, unknown>): CrmLead {
+  const statusRaw = String(row.status ?? "new");
+  const status: CrmLead["status"] =
+    statusRaw === "converted"
+      ? "converted"
+      : statusRaw === "selected"
+        ? "selected"
+        : statusRaw === "shortlisted"
+          ? "shortlisted"
+          : "new";
+
   return {
     id: String(row.id),
     attempt_id: String(row.attempt_id),
@@ -49,16 +62,15 @@ function mapLeadRow(row: Record<string, unknown>): CrmLead {
     why_fit: String(row.why_fit ?? ""),
     trigger_event: String(row.trigger_event ?? ""),
     next_step: String(row.next_step ?? ""),
-    status:
-      row.status === "converted"
-        ? "converted"
-        : row.status === "selected"
-          ? "selected"
-          : "new",
+    decision_maker_rationale: String(row.decision_maker_rationale ?? ""),
+    status,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
 }
+
+const LEAD_SELECT_COLUMNS =
+  "id, attempt_id, company_name, contact_name, contact_title, why_fit, trigger_event, next_step, decision_maker_rationale, status, created_at, updated_at";
 
 /**
  * GET /api/student/crm-leads?attemptId=… — all leads for the attempt.
@@ -83,9 +95,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const supabase = createServiceClient();
     const { data, error } = await supabase
       .from("crm_leads")
-      .select(
-        "id, attempt_id, company_name, contact_name, contact_title, why_fit, trigger_event, next_step, status, created_at, updated_at"
-      )
+      .select(LEAD_SELECT_COLUMNS)
       .eq("attempt_id", attemptId)
       .order("created_at", { ascending: true });
 
@@ -122,25 +132,71 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "Attempt not found." }, { status: 404 });
     }
 
-    const now = new Date().toISOString();
+    const status: "new" | "shortlisted" =
+      body.status === "shortlisted" ? "shortlisted" : "new";
+    const companyName = (body.companyName ?? "").trim();
+
     const supabase = createServiceClient();
+
+    if (status === "shortlisted") {
+      if (!companyName) {
+        return NextResponse.json({ error: "Company name is required." }, { status: 400 });
+      }
+
+      const { count, error: countError } = await supabase
+        .from("crm_leads")
+        .select("id", { count: "exact", head: true })
+        .eq("attempt_id", attemptId)
+        .eq("status", "shortlisted");
+
+      if (countError) {
+        console.error("[crm-leads] shortlist count failed:", countError);
+        return NextResponse.json({ error: "Could not create CRM lead." }, { status: 500 });
+      }
+      if ((count ?? 0) >= 3) {
+        return NextResponse.json(
+          { error: "Shortlist is full (3/3). Remove one to add another." },
+          { status: 400 }
+        );
+      }
+
+      const { data: existingForCompany, error: dupError } = await supabase
+        .from("crm_leads")
+        .select("id")
+        .eq("attempt_id", attemptId)
+        .eq("status", "shortlisted")
+        .eq("company_name", companyName)
+        .limit(1);
+
+      if (dupError) {
+        console.error("[crm-leads] shortlist dup check failed:", dupError);
+        return NextResponse.json({ error: "Could not create CRM lead." }, { status: 500 });
+      }
+      if ((existingForCompany ?? []).length > 0) {
+        return NextResponse.json(
+          { error: "This company is already on your shortlist." },
+          { status: 400 }
+        );
+      }
+    }
+
+    const now = new Date().toISOString();
     const { data, error } = await supabase
       .from("crm_leads")
       .insert({
         attempt_id: attemptId,
-        company_name: (body.companyName ?? "").trim(),
+        company_name: companyName,
         contact_name: (body.contactName ?? "").trim(),
         contact_title: (body.contactTitle ?? "").trim(),
         why_fit: (body.whyFit ?? "").trim(),
         trigger_event: (body.trigger ?? "").trim(),
         next_step: (body.nextStep ?? "").trim(),
-        status: "new",
+        decision_maker_rationale: (body.decisionMakerRationale ?? "").trim(),
+        status,
         created_at: now,
         updated_at: now,
       })
-      .select(
-        "id, attempt_id, company_name, contact_name, contact_title, why_fit, trigger_event, next_step, status, created_at, updated_at"
-      )
+      .select(LEAD_SELECT_COLUMNS)
       .single();
 
     if (error || !data) {

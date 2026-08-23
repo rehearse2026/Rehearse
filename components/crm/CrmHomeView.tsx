@@ -37,7 +37,7 @@ export type CrmHomeLeadSummary = {
   id: string;
   companyName: string;
   contactName: string;
-  status: "new" | "selected" | "converted";
+  status: "new" | "shortlisted" | "selected" | "converted";
 };
 
 type CrmHomeViewProps = {

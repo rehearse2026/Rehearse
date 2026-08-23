@@ -186,7 +186,8 @@ function activeNavForView(view: CrmView): SidebarNavId {
 const LEAD_STATUS_ORDER: Record<CrmLead["status"], number> = {
   selected: 0,
   converted: 0,
-  new: 1,
+  shortlisted: 1,
+  new: 2,
 };
 
 /**
