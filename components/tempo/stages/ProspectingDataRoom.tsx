@@ -1,16 +1,19 @@
 /**
  * ProspectingDataRoom.tsx
  * Prospecting research step: browse 10 roster companies, read Profile/News,
- * and shortlist exactly 3 leads via ProspectingShortlistForm.
+ * AI Assistant chat, and shortlist exactly 3 leads via ProspectingShortlistForm.
  */
 
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ProspectingDataRoomChat } from "@/components/tempo/stages/ProspectingDataRoomChat";
 import { ProspectingShortlistForm } from "@/components/tempo/stages/ProspectingShortlistForm";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import type { DataRoomCompany } from "@/app/api/student/data-room/route";
 import type { CrmLead } from "@/types";
+
+type MainTab = "documents" | "assistant";
 
 type ShortlistEntry = {
   leadId: string;
@@ -43,6 +46,7 @@ export function ProspectingDataRoom({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [mainTab, setMainTab] = useState<MainTab>("documents");
   const [docTab, setDocTab] = useState<"profile" | "news">("profile");
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([]);
   const [formCompany, setFormCompany] = useState<DataRoomCompany | null>(null);
@@ -193,7 +197,37 @@ export function ProspectingDataRoom({
 
   return (
     <div className="flex flex-col h-full min-h-[520px] border border-outline-variant rounded-xl overflow-hidden bg-surface">
-      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+      <div className="px-4 pt-3 pb-2 border-b border-outline-variant bg-surface-container-lowest shrink-0">
+        <div className="inline-flex rounded-lg border border-outline-variant overflow-hidden">
+          {(
+            [
+              { id: "documents" as const, label: "Documents", icon: "folder_open" },
+              { id: "assistant" as const, label: "AI Assistant", icon: "smart_toy" },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setMainTab(tab.id)}
+              className={`inline-flex items-center gap-1.5 px-4 h-9 text-label-md font-bold transition-colors ${
+                mainTab === tab.id
+                  ? "bg-primary-container text-on-primary"
+                  : "bg-white text-on-surface hover:bg-surface-container"
+              }`}
+            >
+              <MaterialIcon name={tab.icon} className="text-[18px]" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Documents tab — kept mounted so browse/selection state survives tab switches */}
+      <div
+        className={`flex flex-col lg:flex-row flex-1 min-h-0 ${
+          mainTab === "documents" ? "" : "hidden"
+        }`}
+      >
         {/* Left: company list */}
         <section className="w-full lg:w-[280px] xl:w-[300px] flex flex-col bg-surface-container-lowest border-b lg:border-b-0 lg:border-r border-outline-variant shrink-0 min-h-0">
           <div className="p-3 border-b border-outline-variant shrink-0">
@@ -383,7 +417,16 @@ export function ProspectingDataRoom({
         </div>
       </div>
 
-      {/* Shortlist tray */}
+      {/* AI Assistant tab — kept mounted so attach chips + chat history survive tab switches */}
+      <div
+        className={`flex-1 flex flex-col min-h-0 min-w-0 ${
+          mainTab === "assistant" ? "" : "hidden"
+        }`}
+      >
+        <ProspectingDataRoomChat attemptId={attemptId} companies={companies} />
+      </div>
+
+      {/* Shortlist tray — always visible regardless of Documents / AI Assistant tab */}
       <div className="border-t border-outline-variant bg-surface-container-lowest px-4 py-3 flex flex-wrap items-center gap-3 shrink-0">
         <div className="flex items-center gap-2 shrink-0">
           <MaterialIcon name="bookmarks" className="text-secondary text-[18px]" />

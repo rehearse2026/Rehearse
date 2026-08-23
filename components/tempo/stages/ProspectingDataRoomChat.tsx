@@ -1,0 +1,279 @@
+/**
+ * ProspectingDataRoomChat.tsx
+ * Data Room AI Assistant — attach roster company documents and chat
+ * grounded only in those attachments (IDs sent to server, not raw text).
+ */
+
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import type { DataRoomCompany } from "@/app/api/student/data-room/route";
+import { sanitizeAiResearchReply } from "@/lib/tempo-prospecting";
+import type { ChatMessage } from "@/types";
+
+type ProspectingDataRoomChatProps = {
+  attemptId: string;
+  companies: DataRoomCompany[];
+};
+
+/**
+ * Attach-documents picker + chat transcript for the Data Room AI Assistant tab.
+ */
+export function ProspectingDataRoomChat({
+  attemptId,
+  companies,
+}: ProspectingDataRoomChatProps): React.ReactElement {
+  const [attachedIds, setAttachedIds] = useState<string[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isAILoading, setIsAILoading] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  const companyById = useMemo(() => {
+    return new Map(companies.map((company) => [company.id, company]));
+  }, [companies]);
+
+  const attachedCompanies = useMemo(() => {
+    return attachedIds
+      .map((id) => companyById.get(id))
+      .filter((company): company is DataRoomCompany => Boolean(company));
+  }, [attachedIds, companyById]);
+
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) {
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
+  }, [messages, isAILoading]);
+
+  const toggleAttached = (companyId: string): void => {
+    setAttachedIds((prev) =>
+      prev.includes(companyId)
+        ? prev.filter((id) => id !== companyId)
+        : [...prev, companyId]
+    );
+    setSendError(null);
+  };
+
+  const removeAttached = (companyId: string): void => {
+    setAttachedIds((prev) => prev.filter((id) => id !== companyId));
+    setSendError(null);
+  };
+
+  const handleSendMessage = async (): Promise<void> => {
+    const trimmed = chatInput.trim();
+    if (!trimmed || isAILoading) {
+      return;
+    }
+    if (attachedIds.length === 0) {
+      setSendError("Attach one or more company documents above to start asking questions.");
+      return;
+    }
+
+    const userMessage: ChatMessage = { role: "user", content: trimmed };
+    const prior = messages;
+    const nextMessages = [...prior, userMessage];
+    setChatInput("");
+    setSendError(null);
+    setMessages(nextMessages);
+    setIsAILoading(true);
+
+    try {
+      const res = await fetch("/api/student/data-room-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attemptId,
+          companyIds: attachedIds,
+          messages: prior,
+          newMessage: trimmed,
+        }),
+      });
+
+      const body = (await res.json().catch(() => null)) as {
+        reply?: string;
+        error?: string;
+      } | null;
+
+      if (!res.ok || !body?.reply) {
+        throw new Error(body?.error ?? "AI request failed");
+      }
+
+      setMessages([
+        ...nextMessages,
+        { role: "assistant", content: sanitizeAiResearchReply(body.reply) },
+      ]);
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Sorry, I couldn't respond right now. Try again in a moment.";
+      setMessages([
+        ...nextMessages,
+        {
+          role: "assistant",
+          content: message,
+        },
+      ]);
+    } finally {
+      setIsAILoading(false);
+    }
+  };
+
+  return (
+    <section className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden">
+      <div className="p-4 border-b border-outline-variant bg-surface-container-low shrink-0 space-y-3">
+        <div>
+          <h3 className="font-headline-md text-headline-md text-primary">AI Assistant</h3>
+          <p className="text-body-md text-on-surface-variant">
+            Attach company documents, then ask questions grounded only in what you attached.
+          </p>
+        </div>
+
+        <div>
+          <p className="text-label-sm font-bold text-on-surface mb-2">Attach Documents</p>
+          <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto custom-scrollbar">
+            {companies.map((company) => {
+              const isAttached = attachedIds.includes(company.id);
+              return (
+                <button
+                  key={company.id}
+                  type="button"
+                  onClick={() => toggleAttached(company.id)}
+                  className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-label-sm font-bold border transition-colors ${
+                    isAttached
+                      ? "bg-primary-container text-on-primary border-primary-container"
+                      : "bg-white text-on-surface border-outline-variant hover:bg-surface-container"
+                  }`}
+                >
+                  <MaterialIcon
+                    name={isAttached ? "check_circle" : "add_circle"}
+                    className="text-[16px]"
+                  />
+                  {company.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 min-h-[32px]">
+          {attachedCompanies.length === 0 ? (
+            <span className="text-label-sm text-on-surface-variant">
+              No documents attached yet.
+            </span>
+          ) : (
+            attachedCompanies.map((company) => (
+              <span
+                key={company.id}
+                className="inline-flex items-center gap-1.5 h-8 pl-3 pr-1.5 rounded-full bg-secondary-container/30 text-on-surface text-label-sm font-bold border border-secondary/20"
+              >
+                {company.name}
+                <button
+                  type="button"
+                  onClick={() => removeAttached(company.id)}
+                  className="w-6 h-6 rounded-full hover:bg-white/70 flex items-center justify-center text-on-surface-variant"
+                  aria-label={`Detach ${company.name}`}
+                >
+                  <MaterialIcon name="close" className="text-[14px]" />
+                </button>
+              </span>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-lg space-y-lg custom-scrollbar">
+          {attachedIds.length === 0 ? (
+            <div className="h-full min-h-[200px] flex items-center justify-center text-center px-6">
+              <p className="text-body-md text-on-surface-variant max-w-md">
+                Attach one or more company documents above to start asking questions.
+              </p>
+            </div>
+          ) : messages.length === 0 ? (
+            <p className="text-body-md text-on-surface-variant text-center py-md">
+              Ask a question about the attached documents. The assistant will not rank or pick a
+              target for you.
+            </p>
+          ) : null}
+
+          {messages.map((msg, i) => (
+            <div key={`data-room-chat-${msg.role}-${i}`}>
+              {msg.role === "user" ? (
+                <div className="flex justify-end">
+                  <div className="bg-primary-container text-on-primary p-md rounded-2xl rounded-tr-none max-w-[80%] shadow-sm">
+                    <p className="text-body-md whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-start gap-md">
+                  <div className="w-8 h-8 rounded-full bg-secondary-fixed/40 flex items-center justify-center shrink-0">
+                    <MaterialIcon name="smart_toy" className="text-secondary text-[20px]" />
+                  </div>
+                  <div className="bg-surface-container p-md rounded-2xl rounded-tl-none max-w-[85%] border border-outline-variant">
+                    <p className="text-[10px] font-bold text-primary uppercase tracking-wide mb-1">
+                      Rehearse AI
+                    </p>
+                    <p className="text-body-md leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isAILoading ? (
+            <div className="flex items-center gap-sm text-on-surface-variant">
+              <div className="w-4 h-4 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+              <span className="text-label-sm">Rehearse AI is thinking...</span>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="p-lg bg-white border-t border-outline-variant shrink-0">
+          {sendError ? <p className="text-sm text-error mb-2">{sendError}</p> : null}
+          <div className="relative flex items-center">
+            <textarea
+              className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl py-3 pl-4 pr-14 text-body-md focus:ring-2 focus:ring-secondary focus:border-transparent outline-none resize-none shadow-sm"
+              placeholder={
+                attachedIds.length === 0
+                  ? "Attach documents to enable chat..."
+                  : "Ask about the attached documents..."
+              }
+              rows={1}
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSendMessage();
+                }
+              }}
+            />
+            <div className="absolute right-3 flex items-center">
+              <button
+                type="button"
+                onClick={() => void handleSendMessage()}
+                disabled={isAILoading || !chatInput.trim()}
+                className="bg-primary-container text-on-primary p-1.5 rounded-lg active:scale-95 transition-transform disabled:opacity-40"
+                aria-label="Send message"
+              >
+                <MaterialIcon name="send" className="text-[20px]" />
+              </button>
+            </div>
+          </div>
+          <div className="mt-sm flex justify-center">
+            <p className="text-label-sm text-on-surface-variant">
+              Rehearse AI can make mistakes. Verify important info.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
