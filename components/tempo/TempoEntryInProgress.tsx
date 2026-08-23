@@ -182,7 +182,7 @@ export function TempoEntryInProgress({
   const entryRedirectHref = `/student/simulation/${simulationId}/entry?classId=${classId}`;
 
   return (
-    <div className="animate-fade-in-up flex flex-col min-h-full">
+    <div className="animate-fade-in-up flex flex-col min-h-full bg-primary-container">
       <div className="flex-1 flex flex-col min-w-0">
         {/* Hero */}
         <section className="bg-primary-container py-16 px-6 lg:px-8 relative overflow-hidden">

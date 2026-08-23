@@ -25,6 +25,14 @@ function shouldHideSidebar(pathname: string): boolean {
 }
 
 /**
+ * Tempo briefing entry — hero/footer are primary-container; match scrollport so
+ * rubber-band overscroll stays blue instead of flashing the light page background.
+ */
+function isTempoEntryPage(pathname: string): boolean {
+  return /^\/student\/simulation\/[^/]+\/entry\/?$/.test(pathname);
+}
+
+/**
  * Wraps authenticated student pages with portal chrome.
  */
 export function StudentPortalShell({
@@ -34,6 +42,7 @@ export function StudentPortalShell({
 }: StudentPortalShellProps): React.ReactElement {
   const pathname = usePathname();
   const hideSidebar = shouldHideSidebar(pathname);
+  const tempoEntry = isTempoEntryPage(pathname);
 
   return (
     <StudentShellProvider>
@@ -43,7 +52,13 @@ export function StudentPortalShell({
         )}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {!hideSidebar && <StudentSidebar />}
-          <main className="flex-1 overflow-y-auto custom-scrollbar bg-background">{children}</main>
+          <main
+            className={`flex-1 overflow-y-auto custom-scrollbar ${
+              tempoEntry ? "bg-primary-container" : "bg-background"
+            }`}
+          >
+            {children}
+          </main>
         </div>
       </div>
     </StudentShellProvider>

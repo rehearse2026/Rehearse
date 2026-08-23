@@ -30,7 +30,7 @@ export function TempoEntryFreshStart({
   ctaHref,
 }: TempoEntryFreshStartProps): React.ReactElement {
   return (
-    <div className="animate-fade-in-up -mx-0">
+    <div className="animate-fade-in-up -mx-0 min-h-full bg-primary-container">
       {/* HERO SECTION */}
       <section className="bg-primary-container text-white py-16">
         <div className="max-w-[1100px] mx-auto px-6 lg:px-8 mb-8">
