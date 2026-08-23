@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/EmptyState";
 import { SimulationCard } from "@/components/SimulationCard";
 import { StudentClassHeader } from "@/components/StudentClassHeader";
+import { RefreshOnMount } from "@/components/student/RefreshOnMount";
 import {
   ATTEMPT_STATUS,
   DEFAULT_CLASS_ID,
@@ -20,9 +21,19 @@ import { attemptHasStartedProgress, pickPreferredInProgressAttempt } from "@/lib
 import { isTempoDefaultSimulation } from "@/lib/tempo-simulation";
 import { getStudentSession } from "@/lib/student-session";
 import { createServiceClient } from "@/lib/supabase/server";
-import type { Attempt } from "@/types";
+import type { SimulationStage } from "@/types";
+
+export const dynamic = "force-dynamic";
 
 type PageProps = { params: { classId: string } };
+
+type InProgressAttemptRow = {
+  id: string;
+  simulation_id: string;
+  current_stage: SimulationStage | null;
+  stage_data: unknown;
+  started_at: string | null;
+};
 
 /**
  * Class detail — student picks a simulation inside one class.
@@ -41,14 +52,16 @@ export default async function StudentClassPage({
   }
 
   const supabase = createServiceClient();
+  // Match Tempo entry: explicitly load stage_data so ICP/wizard progress drives Continue.
   const { data: attempts } = await supabase
     .from("attempts")
-    .select("*")
+    .select("id, simulation_id, current_stage, stage_data, started_at")
     .eq("student_id", session.studentId)
     .eq("class_id", params.classId)
-    .eq("status", ATTEMPT_STATUS.IN_PROGRESS);
+    .eq("status", ATTEMPT_STATUS.IN_PROGRESS)
+    .order("started_at", { ascending: false });
 
-  const inProgressList = (attempts ?? []) as Attempt[];
+  const inProgressList = (attempts ?? []) as InProgressAttemptRow[];
   const attemptIds = inProgressList.map((a) => a.id);
 
   const stageCountByAttempt = new Map<string, number>();
@@ -64,22 +77,17 @@ export default async function StudentClassPage({
     });
   }
 
-  const attemptBySim = new Map<string, Attempt>();
-  const attemptsBySimId = new Map<string, Attempt[]>();
+  const attemptBySim = new Map<string, InProgressAttemptRow>();
+  const attemptsBySimId = new Map<string, InProgressAttemptRow[]>();
   for (const attempt of inProgressList) {
     const list = attemptsBySimId.get(attempt.simulation_id) ?? [];
     list.push(attempt);
     attemptsBySimId.set(attempt.simulation_id, list);
   }
   Array.from(attemptsBySimId.entries()).forEach(([simId, list]) => {
-    const preferred = pickPreferredInProgressAttempt(
-      list.map((row) => ({
-        ...row,
-        stage_data: (row as unknown as { stage_data?: unknown }).stage_data,
-      }))
-    );
+    const preferred = pickPreferredInProgressAttempt(list);
     if (preferred) {
-      attemptBySim.set(simId, preferred as Attempt);
+      attemptBySim.set(simId, preferred);
     }
   });
 
@@ -91,6 +99,7 @@ export default async function StudentClassPage({
 
   return (
     <div className="px-4 sm:px-8 py-6 lg:py-8 space-y-8 max-w-[1440px] mx-auto">
+      <RefreshOnMount />
       <Link
         href="/student/classes"
         className="inline-flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors group font-label-md text-label-md"
@@ -180,14 +189,10 @@ export default async function StudentClassPage({
                 ? `/student/simulation/${sim.id}/entry?classId=${params.classId}`
                 : `/student/simulation/${sim.id}?${query.toString()}`;
 
-              // Match shared progress rules: blank lead_gen shells are not "started".
-              const stageData = existing
-                ? (existing as unknown as { stage_data?: Record<string, unknown> | null })
-                    .stage_data
-                : null;
+              // Match Tempo entry: blank lead_gen shells are not "started".
               const hasStarted = attemptHasStartedProgress({
                 currentStage: existing?.current_stage,
-                stageData,
+                stageData: existing?.stage_data ?? null,
                 stagesCompleted,
               });
 

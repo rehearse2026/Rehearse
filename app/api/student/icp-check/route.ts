@@ -8,6 +8,7 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { requireStudentApi } from "@/lib/api-auth";
+import { revalidateStudentAttemptSurfaces } from "@/lib/revalidate-student-progress";
 import { createServiceClient } from "@/lib/supabase/server";
 import {
   TEMPO_ICP_AFFIRMED_TEXT,
@@ -74,11 +75,16 @@ function parseJudgment(raw: string): { meetsCorrectCriteria: boolean; reasoning:
 async function loadOwnedAttempt(
   attemptId: string,
   studentId: string
-): Promise<{ id: string; stage_data: Record<string, unknown> | null } | null> {
+): Promise<{
+  id: string;
+  stage_data: Record<string, unknown> | null;
+  class_id: string | null;
+  simulation_id: string | null;
+} | null> {
   const supabase = createServiceClient();
   const { data: attempt } = await supabase
     .from("attempts")
-    .select("id, student_id, stage_data")
+    .select("id, student_id, stage_data, class_id, simulation_id")
     .eq("id", attemptId)
     .eq("student_id", studentId)
     .single();
@@ -90,6 +96,8 @@ async function loadOwnedAttempt(
   return {
     id: attempt.id as string,
     stage_data: (attempt.stage_data as Record<string, unknown> | null) ?? null,
+    class_id: (attempt.class_id as string | null) ?? null,
+    simulation_id: (attempt.simulation_id as string | null) ?? null,
   };
 }
 
@@ -164,6 +172,10 @@ export async function PATCH(request: Request): Promise<NextResponse> {
 
     const next: ProspectingIcpState = { ...existingIcp, feedbackSeen: true };
     await persistIcp(attemptId, attempt.stage_data, next);
+    revalidateStudentAttemptSurfaces({
+      classId: attempt.class_id,
+      simulationId: attempt.simulation_id,
+    });
     return NextResponse.json({ icp: next });
   } catch (err) {
     console.error("[icp-check] PATCH failed:", err);
@@ -241,6 +253,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     };
 
     await persistIcp(attemptId, attempt.stage_data, icp);
+    revalidateStudentAttemptSurfaces({
+      classId: attempt.class_id,
+      simulationId: attempt.simulation_id,
+    });
 
     return NextResponse.json({
       result,

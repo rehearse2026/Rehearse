@@ -10,6 +10,7 @@ import {
   normalizeProspectingWizardState,
   type ProspectingWizardState,
 } from "@/lib/tempo-prospecting";
+import { revalidateStudentAttemptSurfaces } from "@/lib/revalidate-student-progress";
 import { createServiceClient } from "@/lib/supabase/server";
 
 type SaveBody = {
@@ -73,7 +74,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { data: attempt } = await supabase
       .from("attempts")
-      .select("id, student_id, stage_data")
+      .select("id, student_id, stage_data, class_id, simulation_id")
       .eq("id", attemptId)
       .eq("student_id", auth.session.studentId)
       .single();
@@ -105,6 +106,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       console.error("[prospecting-wizard] save", updateError);
       return NextResponse.json({ error: "Could not save draft." }, { status: 500 });
     }
+
+    revalidateStudentAttemptSurfaces({
+      classId: (attempt.class_id as string | null) ?? null,
+      simulationId: (attempt.simulation_id as string | null) ?? null,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

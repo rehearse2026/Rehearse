@@ -13,12 +13,18 @@ import {
   StudentOngoingSimulations,
   type StudentOngoingRow,
 } from "@/components/StudentOngoingSimulations";
+import { RefreshOnMount } from "@/components/student/RefreshOnMount";
 import { ATTEMPT_STATUS, DEFAULT_CLASS_ID } from "@/lib/constants";
-import { attemptHasStartedProgress } from "@/lib/attempt-progress";
+import {
+  attemptHasStartedProgress,
+  pickPreferredInProgressAttempt,
+} from "@/lib/attempt-progress";
 import { isTempoDefaultSimulation } from "@/lib/tempo-simulation";
 import { getStudentSession } from "@/lib/student-session";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { SimulationStage } from "@/types";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Simulations — Rehearse",
@@ -36,6 +42,17 @@ type AttemptClassJoin = {
   id: string;
   name: string;
 } | null;
+
+type OngoingAttemptRow = {
+  id: string;
+  class_id: string | null;
+  current_stage: SimulationStage | null;
+  stage_data: unknown;
+  simulation_id: string | null;
+  started_at: string | null;
+  simulations: AttemptSimJoin | AttemptSimJoin[] | null;
+  classes: AttemptClassJoin | AttemptClassJoin[] | null;
+};
 
 /**
  * Student simulations tab — ongoing runs and completed history.
@@ -66,14 +83,26 @@ export default async function StudentSimulationsPage(): Promise<React.ReactEleme
       .limit(20),
   ]);
 
-  const startedOngoing = (ongoingRows ?? []).filter((row) =>
-    attemptHasStartedProgress({
-      currentStage: row.current_stage as SimulationStage | null,
-      stageData: (row as { stage_data?: unknown }).stage_data,
-    })
-  );
+  // One card per simulation+class: prefer the attempt with real progress (ICP etc.).
+  const grouped = new Map<string, OngoingAttemptRow[]>();
+  for (const row of (ongoingRows ?? []) as OngoingAttemptRow[]) {
+    const key = `${row.class_id ?? ""}:${row.simulation_id ?? ""}`;
+    const list = grouped.get(key) ?? [];
+    list.push(row);
+    grouped.set(key, list);
+  }
 
-  const attemptIds = startedOngoing.map((row) => row.id as string);
+  const preferredOngoing = Array.from(grouped.values())
+    .map((list) => pickPreferredInProgressAttempt(list))
+    .filter((row): row is OngoingAttemptRow => row != null)
+    .filter((row) =>
+      attemptHasStartedProgress({
+        currentStage: row.current_stage,
+        stageData: row.stage_data,
+      })
+    );
+
+  const attemptIds = preferredOngoing.map((row) => row.id);
   const stageCountByAttempt = new Map<string, number>();
   if (attemptIds.length > 0) {
     const { data: stageRows } = await supabase
@@ -87,29 +116,29 @@ export default async function StudentSimulationsPage(): Promise<React.ReactEleme
     }
   }
 
-  const ongoing: StudentOngoingRow[] = startedOngoing.map((row) => {
+  const ongoing: StudentOngoingRow[] = preferredOngoing.map((row) => {
     const simRaw = row.simulations;
     const sim = (Array.isArray(simRaw) ? simRaw[0] ?? null : simRaw) as AttemptSimJoin;
     const classRaw = row.classes;
     const cls = (Array.isArray(classRaw) ? classRaw[0] ?? null : classRaw) as AttemptClassJoin;
-    const classId = (row.class_id as string) ?? "";
-    const simulationId = (row.simulation_id as string) ?? sim?.id ?? "";
+    const classId = row.class_id ?? "";
+    const simulationId = row.simulation_id ?? sim?.id ?? "";
     const title = sim?.title ?? "Simulation";
     const isTempo =
       classId === DEFAULT_CLASS_ID && isTempoDefaultSimulation(simulationId, title);
 
     const continueHref = isTempo
       ? `/student/simulation/${simulationId}/entry?classId=${classId}`
-      : `/student/simulation/${simulationId}?classId=${classId}&attempt=${row.id as string}`;
+      : `/student/simulation/${simulationId}?classId=${classId}&attempt=${row.id}`;
 
     return {
-      attemptId: row.id as string,
+      attemptId: row.id,
       simulationId,
       title,
       personaName: sim?.persona_name ?? null,
       personaRole: sim?.persona_role ?? null,
       className: cls?.name ?? null,
-      stagesCompleted: stageCountByAttempt.get(row.id as string) ?? 0,
+      stagesCompleted: stageCountByAttempt.get(row.id) ?? 0,
       continueHref,
     };
   });
@@ -127,6 +156,7 @@ export default async function StudentSimulationsPage(): Promise<React.ReactEleme
 
   return (
     <div className="animate-fade-in-up">
+      <RefreshOnMount />
       <div className="max-w-[1440px] mx-auto px-4 sm:px-8 py-8 space-y-10">
         <header>
           <h1 className="font-display text-display text-on-surface">My Simulations</h1>
