@@ -76,8 +76,8 @@ export default async function StudentClassPage({
   return (
     <div className="px-4 sm:px-6">
       <Link
-        href="/student/dashboard"
-        className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:underline mb-6 transition-colors"
+        href="/student/classes"
+        className="inline-flex items-center gap-1.5 text-sm text-on-surface-variant hover:underline mb-6 transition-colors"
       >
         <span aria-hidden>←</span>
         All classes

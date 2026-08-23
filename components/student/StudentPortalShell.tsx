@@ -9,12 +9,11 @@
 import { usePathname } from "next/navigation";
 import { StudentDashboardHeader } from "./StudentDashboardHeader";
 import { StudentShellProvider } from "./StudentShellProvider";
-import { StudentSidebar, type StudentSidebarClass } from "./StudentSidebar";
+import { StudentSidebar } from "./StudentSidebar";
 
 type StudentPortalShellProps = {
   displayName: string;
   classCount: number;
-  enrolledClasses: StudentSidebarClass[];
   children: React.ReactNode;
 };
 
@@ -26,12 +25,11 @@ function shouldHideSidebar(pathname: string): boolean {
 }
 
 /**
- * Wraps authenticated student pages with professor-style portal chrome.
+ * Wraps authenticated student pages with portal chrome.
  */
 export function StudentPortalShell({
   displayName,
   classCount,
-  enrolledClasses,
   children,
 }: StudentPortalShellProps): React.ReactElement {
   const pathname = usePathname();
@@ -44,7 +42,7 @@ export function StudentPortalShell({
           <StudentDashboardHeader displayName={displayName} classCount={classCount} />
         )}
         <div className="flex flex-1 min-h-0 overflow-hidden">
-          {!hideSidebar && <StudentSidebar enrolledClasses={enrolledClasses} />}
+          {!hideSidebar && <StudentSidebar />}
           <main className="flex-1 overflow-y-auto custom-scrollbar bg-background">{children}</main>
         </div>
       </div>

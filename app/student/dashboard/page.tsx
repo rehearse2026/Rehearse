@@ -1,27 +1,23 @@
 /**
- * dashboard/page.tsx — student
- * Lists enrolled classes as professor-styled cards; simulations live inside each class.
+ * dashboard/page.tsx — student Home
+ * Welcome + enrolled class cards with join-class tile (professor add-class pattern).
  */
 
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { EmptyState } from "@/components/EmptyState";
+import { JoinClassButton } from "@/app/student/dashboard/JoinClassButton";
 import { StudentClassCard } from "@/components/StudentClassCard";
-import {
-  StudentAttemptHistory,
-  type StudentAttemptRow,
-} from "@/components/StudentAttemptHistory";
+import { StudentEmptyState } from "@/components/student/StudentEmptyState";
 import { DEFAULT_CLASS_ID } from "@/lib/constants";
 import { loadStudentEnrolledClasses } from "@/lib/student-class-data";
 import { getStudentSession } from "@/lib/student-session";
-import { createServiceClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
-  title: "My Simulations — Rehearse",
+  title: "Home — Rehearse",
 };
 
 /**
- * Student home — pick a class, then choose a simulation inside it.
+ * Student home — welcome and class cards; completed sims live under Simulations.
  */
 export default async function StudentDashboardPage(): Promise<React.ReactElement> {
   const session = await getStudentSession();
@@ -30,26 +26,6 @@ export default async function StudentDashboardPage(): Promise<React.ReactElement
   }
 
   const enrolledClasses = await loadStudentEnrolledClasses(session.studentId);
-
-  const supabase = createServiceClient();
-  const { data: completedAttempts } = await supabase
-    .from("attempts")
-    .select("id, total_score, completed_at, simulations ( id, title, persona_name )")
-    .eq("student_id", session.studentId)
-    .eq("status", "completed")
-    .order("completed_at", { ascending: false })
-    .limit(20);
-
-  const history: StudentAttemptRow[] = (completedAttempts ?? []).map((row) => {
-    const sim = row.simulations;
-    const simulation = Array.isArray(sim) ? sim[0] ?? null : sim;
-    return {
-      id: row.id as string,
-      total_score: row.total_score as number,
-      completed_at: row.completed_at as string | null,
-      simulations: simulation as StudentAttemptRow["simulations"],
-    };
-  });
 
   return (
     <div className="animate-fade-in-up">
@@ -69,10 +45,11 @@ export default async function StudentDashboardPage(): Promise<React.ReactElement
 
         <section>
           {enrolledClasses.length === 0 ? (
-            <EmptyState
-              icon="🎓"
-              title="No classes yet."
-              description="Use Join a Class in the header with your professor's class code to get started."
+            <StudentEmptyState
+              icon="school"
+              heading="No classes yet"
+              description="You haven't joined any classes yet. Enter your professor's class code to get started."
+              action={<JoinClassButton variant="empty" />}
             />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -88,11 +65,10 @@ export default async function StudentDashboardPage(): Promise<React.ReactElement
                   isSystemDefault={cls.classId === DEFAULT_CLASS_ID}
                 />
               ))}
+              <JoinClassButton variant="tile" />
             </div>
           )}
         </section>
-
-        <StudentAttemptHistory attempts={history} />
       </div>
     </div>
   );

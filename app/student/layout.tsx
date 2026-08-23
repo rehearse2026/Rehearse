@@ -26,14 +26,7 @@ export default async function StudentLayout({
   const enrolledClasses = await loadStudentEnrolledClasses(session.studentId);
 
   return (
-    <StudentPortalShell
-      displayName={session.displayName}
-      classCount={enrolledClasses.length}
-      enrolledClasses={enrolledClasses.map((cls) => ({
-        classId: cls.classId,
-        className: cls.className,
-      }))}
-    >
+    <StudentPortalShell displayName={session.displayName} classCount={enrolledClasses.length}>
       {children}
     </StudentPortalShell>
   );

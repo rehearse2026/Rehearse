@@ -1,18 +1,31 @@
 /**
  * JoinClassButton.tsx
  * Modal for logged-in students to enroll in an additional class.
+ * Trigger visuals mirror professor add-class patterns (primary / tile / empty CTA).
  */
 
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { useToast } from "@/hooks/useToast";
+
+export type JoinClassButtonVariant = "primary" | "tile" | "empty";
+
+type JoinClassButtonProps = {
+  /** Visual treatment for the trigger — modal/API logic is shared */
+  variant?: JoinClassButtonVariant;
+  className?: string;
+};
 
 /**
  * Opens a modal to join a class by code — POST /api/student/join-class.
  */
-export function JoinClassButton(): React.ReactElement {
+export function JoinClassButton({
+  variant = "primary",
+  className = "",
+}: JoinClassButtonProps): React.ReactElement {
   const router = useRouter();
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
@@ -51,15 +64,44 @@ export function JoinClassButton(): React.ReactElement {
     router.refresh();
   };
 
-  return (
-    <>
+  const trigger =
+    variant === "tile" ? (
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="bg-primary-container text-on-primary px-4 h-10 rounded-xl font-label-md text-label-md hover:bg-primary-container/90 transition-all duration-300 shadow-sm hover:shadow-md whitespace-nowrap"
+        className={`bg-surface-container-low border-2 border-dashed border-outline-variant rounded-xl flex flex-col items-center justify-center p-xl text-center hover:bg-surface-container-high transition-colors duration-150 cursor-pointer group h-full min-h-[220px] ${className}`}
       >
+        <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center shadow-sm mb-md group-hover:scale-110 transition-transform duration-200">
+          <MaterialIcon name="add_box" className="text-[32px] text-primary" />
+        </div>
+        <p className="font-headline-md text-headline-md text-primary">Join a Class</p>
+        <p className="text-on-surface-variant text-body-md max-w-[200px]">
+          Enter your professor&apos;s class code to enroll and start practicing.
+        </p>
+      </button>
+    ) : variant === "empty" ? (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`bg-primary-container text-white font-bold rounded-lg px-6 h-10 flex items-center gap-2 hover:opacity-90 transition-opacity duration-150 ${className}`}
+      >
+        <MaterialIcon name="add_circle" className="text-[20px]" />
+        Join Class
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`flex items-center gap-2 px-md py-2.5 bg-primary-container text-white rounded-lg hover:opacity-90 font-label-md active:scale-95 ${className}`}
+      >
+        <MaterialIcon name="add" />
         Join a Class
       </button>
+    );
+
+  return (
+    <>
+      {trigger}
 
       {open && (
         <div

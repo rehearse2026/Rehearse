@@ -8,7 +8,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DEFAULT_CLASS_ID, TEMPO_SIMULATION_ID } from "@/lib/constants";
-import { JoinClassButton } from "@/app/student/dashboard/JoinClassButton";
 import { TestShortcutsDropdown } from "@/app/student/dashboard/TestShortcutsDropdown";
 
 type StudentDashboardHeaderProps = {
@@ -17,7 +16,7 @@ type StudentDashboardHeaderProps = {
 };
 
 /**
- * Sticky header with logo, join class, user info, and logout.
+ * Sticky header with logo, user info, and logout.
  */
 export function StudentDashboardHeader({
   displayName,
@@ -54,8 +53,6 @@ export function StudentDashboardHeader({
         </Link>
 
         <div className="flex items-center gap-3 sm:gap-4">
-          <JoinClassButton />
-
           <div className="flex items-center gap-2 sm:gap-3 border-l border-outline-variant pl-3 sm:pl-4">
             <div className="hidden md:block text-right">
               <p className="font-label-md text-label-md text-on-surface">{displayName}</p>
