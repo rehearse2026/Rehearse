@@ -97,14 +97,17 @@ export default async function StudentSimulationPage({
   }
 
   if (!attempt) {
-    const { data: existing } = await supabase
+    const { data: existingRows } = await supabase
       .from("attempts")
       .select("*")
       .eq("simulation_id", params.id)
       .eq("student_id", session.studentId)
       .eq("class_id", classId)
       .eq("status", ATTEMPT_STATUS.IN_PROGRESS)
-      .maybeSingle();
+      .order("started_at", { ascending: false })
+      .limit(1);
+
+    const existing = existingRows?.[0] ?? null;
 
     if (existing) {
       attempt = existing as Attempt;

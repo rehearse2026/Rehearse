@@ -16,6 +16,7 @@ import {
   DEFAULT_CLASS_NAME,
 } from "@/lib/constants";
 import { loadStudentClassDetail } from "@/lib/student-class-data";
+import { attemptHasStartedProgress } from "@/lib/attempt-progress";
 import { isTempoDefaultSimulation } from "@/lib/tempo-simulation";
 import { getStudentSession } from "@/lib/student-session";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -165,18 +166,16 @@ export default async function StudentClassPage({
                 ? `/student/simulation/${sim.id}/entry?classId=${params.classId}`
                 : `/student/simulation/${sim.id}?${query.toString()}`;
 
-              // Match Tempo entry fresh-start rules: an in_progress row at
-              // lead_gen with no stage_data means the student has not begun.
-              const currentStage = existing?.current_stage ?? null;
+              // Match shared progress rules: blank lead_gen shells are not "started".
               const stageData = existing
                 ? (existing as unknown as { stage_data?: Record<string, unknown> | null })
                     .stage_data
                 : null;
-              const hasStartedStageOne = Boolean(stageData);
-              const hasStarted =
-                Boolean(existing) &&
-                currentStage !== null &&
-                !(currentStage === "lead_gen" && !hasStartedStageOne);
+              const hasStarted = attemptHasStartedProgress({
+                currentStage: existing?.current_stage,
+                stageData,
+                stagesCompleted,
+              });
 
               return (
                 <SimulationCard

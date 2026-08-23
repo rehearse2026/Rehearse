@@ -14,6 +14,7 @@ import {
   type StudentOngoingRow,
 } from "@/components/StudentOngoingSimulations";
 import { ATTEMPT_STATUS, DEFAULT_CLASS_ID } from "@/lib/constants";
+import { attemptHasStartedProgress } from "@/lib/attempt-progress";
 import { isTempoDefaultSimulation } from "@/lib/tempo-simulation";
 import { getStudentSession } from "@/lib/student-session";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -35,22 +36,6 @@ type AttemptClassJoin = {
   id: string;
   name: string;
 } | null;
-
-/**
- * True when an in_progress attempt has real student progress (not a blank lead_gen shell).
- */
-function attemptHasStarted(
-  currentStage: SimulationStage | null | undefined,
-  stageData: unknown
-): boolean {
-  if (!currentStage) {
-    return false;
-  }
-  if (currentStage === "lead_gen") {
-    return Boolean(stageData);
-  }
-  return true;
-}
 
 /**
  * Student simulations tab — ongoing runs and completed history.
@@ -82,10 +67,10 @@ export default async function StudentSimulationsPage(): Promise<React.ReactEleme
   ]);
 
   const startedOngoing = (ongoingRows ?? []).filter((row) =>
-    attemptHasStarted(
-      row.current_stage as SimulationStage | null,
-      (row as { stage_data?: unknown }).stage_data
-    )
+    attemptHasStartedProgress({
+      currentStage: row.current_stage as SimulationStage | null,
+      stageData: (row as { stage_data?: unknown }).stage_data,
+    })
   );
 
   const attemptIds = startedOngoing.map((row) => row.id as string);

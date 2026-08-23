@@ -17,9 +17,12 @@ import {
   getCurrentTempoStage,
   isTempoDefaultSimulation,
 } from "@/lib/tempo-simulation";
+import { attemptHasStartedProgress } from "@/lib/attempt-progress";
 import { getStudentSession } from "@/lib/student-session";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { SimulationStage } from "@/types";
+
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: { id: string };
@@ -82,14 +85,17 @@ export default async function TempoSimulationEntryPage({
     redirect("/student/dashboard");
   }
 
-  let { data: inProgressAttempt } = await supabase
+  const { data: inProgressRows } = await supabase
     .from("attempts")
-    .select("id, status, current_stage, total_score, stage_data")
+    .select("id, status, current_stage, total_score, stage_data, started_at")
     .eq("student_id", session.studentId)
     .eq("simulation_id", params.id)
     .eq("class_id", classId)
     .eq("status", "in_progress")
-    .maybeSingle();
+    .order("started_at", { ascending: false })
+    .limit(1);
+
+  let inProgressAttempt = inProgressRows?.[0] ?? null;
 
   if (!inProgressAttempt && searchParams.new === "1") {
     const { data: created } = await supabase
@@ -101,7 +107,7 @@ export default async function TempoSimulationEntryPage({
         simulation_id: params.id,
         current_stage: "lead_gen",
       })
-      .select("id, status, current_stage, total_score, stage_data")
+      .select("id, status, current_stage, total_score, stage_data, started_at")
       .single();
 
     inProgressAttempt = created;
@@ -113,25 +119,15 @@ export default async function TempoSimulationEntryPage({
     redirect(`/student/simulation/${params.id}/complete?classId=${classId}&attempt=${inProgressAttempt.id}`);
   }
 
-  // Stage 1 keeps current_stage at "lead_gen" until completion, so use wizard
-  // draft state (written as soon as the student begins) to detect progress.
-  const hasStartedStageOne = Boolean(inProgressAttempt?.stage_data);
-  const stageData = (inProgressAttempt?.stage_data ?? {}) as Record<string, unknown>;
+  // Stage 1 keeps current_stage at "lead_gen" until completion — detect ICP / wizard
+  // progress from stage_data (and stage_scores) rather than Boolean(stage_data) alone.
+  const stageData = (inProgressAttempt?.stage_data ?? null) as Record<string, unknown> | null;
   // Until the student clicks "Begin Stage 2" on the Discovery handoff, they are
   // still wrapping up Stage 1 (required CRM fields), so keep the entry screen
   // presenting Stage 1 rather than jumping ahead to Stage 2.
-  const discoveryHandoffSeen = stageData.discoveryHandoffSeen === true;
+  const discoveryHandoffSeen = stageData?.discoveryHandoffSeen === true;
   const displayStage: SimulationStage | null =
     currentStage === "discovery" && !discoveryHandoffSeen ? "prospecting" : currentStage;
-  const isFreshStart =
-    !inProgressAttempt ||
-    currentStage === null ||
-    (currentStage === "lead_gen" && !hasStartedStageOne);
-  const isMidSimulation =
-    !!inProgressAttempt &&
-    !!currentStage &&
-    (IN_PROGRESS_STAGES.includes(currentStage) ||
-      (currentStage === "lead_gen" && hasStartedStageOne));
 
   const attemptId = inProgressAttempt?.id ?? null;
   const hasInProgressAttempt = !!inProgressAttempt;
@@ -158,6 +154,21 @@ export default async function TempoSimulationEntryPage({
     // Presenting Stage 1 as still in progress; keep the roadmap consistent.
     completedStageKeys.delete("prospecting");
   }
+
+  const hasStartedStageOne = attemptHasStartedProgress({
+    currentStage,
+    stageData,
+    stagesCompleted: completedStageKeys.size,
+  });
+  const isFreshStart =
+    !inProgressAttempt ||
+    currentStage === null ||
+    (currentStage === "lead_gen" && !hasStartedStageOne);
+  const isMidSimulation =
+    !!inProgressAttempt &&
+    !!currentStage &&
+    (IN_PROGRESS_STAGES.includes(currentStage) ||
+      (currentStage === "lead_gen" && hasStartedStageOne));
 
   const ctaHref = buildTempoEntryCtaHref(
     params.id,
