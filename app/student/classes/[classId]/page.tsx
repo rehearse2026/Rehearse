@@ -72,32 +72,42 @@ export default async function StudentClassPage({
   const displayDescription = isDefaultClass
     ? DEFAULT_CLASS_DESCRIPTION
     : classDetail.description;
+  const simCount = classDetail.simulations.length;
 
   return (
-    <div className="px-4 sm:px-6">
+    <div className="px-4 sm:px-8 py-6 lg:py-8 space-y-8 max-w-[1440px] mx-auto">
       <Link
         href="/student/classes"
-        className="inline-flex items-center gap-1.5 text-sm text-on-surface-variant hover:underline mb-6 transition-colors"
+        className="inline-flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors group font-label-md text-label-md"
       >
-        <span aria-hidden>←</span>
+        <span className="material-symbols-outlined text-[18px] group-hover:-translate-x-1 transition-transform">
+          arrow_back
+        </span>
         All classes
       </Link>
 
       {isDefaultClass ? (
-        <div
-          className="rounded-xl overflow-hidden mb-4 min-h-[140px] flex flex-col justify-end px-5 py-5 bg-cover bg-center"
-          style={{
-            backgroundImage: `linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0.2)), url(${DEFAULT_CLASS_BANNER_URL})`,
-          }}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="material-symbols-outlined text-white/80 text-[20px]" aria-hidden>
-              auto_awesome
-            </span>
-            <h2 className="text-2xl font-bold text-white">{DEFAULT_CLASS_NAME}</h2>
-            <span className="px-2 py-0.5 bg-white/10 text-white font-bold text-[10px] uppercase rounded">
-              Available to all students
-            </span>
+        <div className="relative rounded-xl overflow-hidden min-h-[240px] flex flex-col justify-end p-6 lg:p-8 border border-outline-variant shadow-sm">
+          <div className="absolute inset-0 z-0">
+            <div
+              className="w-full h-full bg-cover bg-center"
+              style={{ backgroundImage: `url(${DEFAULT_CLASS_BANNER_URL})` }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-primary/90 to-primary/30 mix-blend-multiply" />
+          </div>
+          <div className="relative z-10 flex flex-col gap-2 max-w-3xl">
+            <div>
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-container/20 text-on-primary border border-on-primary/20 backdrop-blur-sm font-label-sm text-label-sm mb-4">
+                <span className="material-symbols-outlined text-[14px]" aria-hidden>
+                  public
+                </span>
+                Available to all students
+              </span>
+            </div>
+            <h2 className="font-display text-display text-on-primary">{DEFAULT_CLASS_NAME}</h2>
+            {displayDescription && (
+              <p className="font-body-lg text-body-lg text-on-primary/80">{displayDescription}</p>
+            )}
           </div>
         </div>
       ) : (
@@ -105,63 +115,71 @@ export default async function StudentClassPage({
           className={classDetail.className}
           cardImageUrl={classDetail.cardImageUrl}
           cardColorScheme={classDetail.cardColorScheme}
+          description={displayDescription}
         />
       )}
 
-      {displayDescription && (
-        <p className="text-sm text-text-secondary mb-6 -mt-2">{displayDescription}</p>
-      )}
-
-      {classDetail.simulations.length === 0 ? (
-        isDefaultClass ? (
-          <div className="text-center py-12 text-text-secondary">
-            <span className="material-symbols-outlined text-5xl mb-3 block opacity-30" aria-hidden>
-              rocket_launch
-            </span>
-            <p className="text-base">No Rehearse Essentials yet.</p>
-            <p className="text-sm mt-1">Check back soon.</p>
-          </div>
-        ) : (
-          <EmptyState
-            icon="🎯"
-            title="No simulations yet."
-            description="Your professor hasn't assigned any published simulations to this class yet. Check back later."
-          />
-        )
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {classDetail.simulations.map((sim) => {
-            const existing = attemptBySim.get(sim.id);
-            const stagesCompleted = existing
-              ? stageCountByAttempt.get(existing.id) ?? 0
-              : 0;
-            const query = new URLSearchParams({ classId: params.classId });
-            if (existing) {
-              query.set("attempt", existing.id);
-            }
-
-            const isTempoInDefaultClass =
-              params.classId === DEFAULT_CLASS_ID &&
-              isTempoDefaultSimulation(sim.id, sim.title);
-
-            const href = isTempoInDefaultClass
-              ? `/student/simulation/${sim.id}/entry?classId=${params.classId}`
-              : `/student/simulation/${sim.id}?${query.toString()}`;
-
-            return (
-              <SimulationCard
-                key={sim.id}
-                simulation={sim}
-                className={classDetail.className}
-                accentColor={classDetail.accentColor}
-                actionLabel={existing ? "Continue" : "Start Simulation"}
-                href={href}
-                stagesCompleted={stagesCompleted}
-              />
-            );
-          })}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between border-b border-outline-variant pb-2">
+          <h3 className="font-headline-md text-headline-md text-primary">Simulations</h3>
+          <span className="font-label-md text-label-md text-on-surface-variant">
+            {simCount === 0
+              ? "None available"
+              : `${simCount} Available`}
+          </span>
         </div>
-      )}
+
+        {simCount === 0 ? (
+          isDefaultClass ? (
+            <EmptyState
+              icon=""
+              materialIcon="rocket_launch"
+              title="No Rehearse Essentials yet."
+              description="Check back soon."
+            />
+          ) : (
+            <EmptyState
+              icon=""
+              materialIcon="model_training"
+              title="No simulations yet."
+              description="Your professor hasn't assigned any published simulations to this class yet. Check back later."
+            />
+          )
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
+            {classDetail.simulations.map((sim) => {
+              const existing = attemptBySim.get(sim.id);
+              const stagesCompleted = existing
+                ? stageCountByAttempt.get(existing.id) ?? 0
+                : 0;
+              const query = new URLSearchParams({ classId: params.classId });
+              if (existing) {
+                query.set("attempt", existing.id);
+              }
+
+              const isTempoInDefaultClass =
+                params.classId === DEFAULT_CLASS_ID &&
+                isTempoDefaultSimulation(sim.id, sim.title);
+
+              const href = isTempoInDefaultClass
+                ? `/student/simulation/${sim.id}/entry?classId=${params.classId}`
+                : `/student/simulation/${sim.id}?${query.toString()}`;
+
+              return (
+                <SimulationCard
+                  key={sim.id}
+                  simulation={sim}
+                  accentColor={isDefaultClass ? "#00000b" : classDetail.accentColor}
+                  actionLabel={existing ? "Continue" : "Start Simulation"}
+                  href={href}
+                  stagesCompleted={stagesCompleted}
+                  inProgress={Boolean(existing)}
+                />
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

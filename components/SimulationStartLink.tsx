@@ -13,6 +13,8 @@ type SimulationStartLinkProps = {
   href: string;
   label: string;
   simulationTitle: string;
+  /** Visual variant — continue (filled) vs start (outline) */
+  variant?: "continue" | "start";
 };
 
 /**
@@ -22,6 +24,7 @@ export function SimulationStartLink({
   href,
   label,
   simulationTitle,
+  variant = "start",
 }: SimulationStartLinkProps): React.ReactElement {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -32,6 +35,11 @@ export function SimulationStartLink({
       router.push(href);
     }, SIMULATION_ENTRY_LOADER_MS);
   };
+
+  const buttonClass =
+    variant === "continue"
+      ? "h-10 px-6 bg-primary-container text-on-primary rounded-lg font-label-md text-label-md hover:bg-primary transition-colors flex items-center gap-2"
+      : "h-10 px-6 bg-surface text-primary border border-outline-variant rounded-lg font-label-md text-label-md hover:bg-surface-container-low transition-colors flex items-center gap-2";
 
   return (
     <>
@@ -44,8 +52,13 @@ export function SimulationStartLink({
           <div className="w-10 h-10 border-2 border-white/30 border-t-white rounded-full animate-spin mt-8" />
         </div>
       )}
-      <button type="button" onClick={handleClick} className="mt-auto w-full btn-primary">
+      <button type="button" onClick={handleClick} className={buttonClass}>
         {label}
+        {variant === "continue" && (
+          <span className="material-symbols-outlined text-[18px]" aria-hidden>
+            arrow_forward
+          </span>
+        )}
       </button>
     </>
   );

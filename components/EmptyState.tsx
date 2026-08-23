@@ -1,27 +1,38 @@
 /**
  * EmptyState.tsx
- * Centered empty list placeholder — Stitch surface treatment.
+ * Centered empty list placeholder — Stitch / portal surface treatment.
  */
 
 type EmptyStateProps = {
+  /** Emoji (legacy) or leave empty when using materialIcon */
   icon?: string;
+  /** Material Symbols name — preferred when set */
+  materialIcon?: string;
   title: string;
   description?: string;
   action?: React.ReactNode;
 };
 
 /**
- * Renders emoji/icon, title, optional description and CTA.
+ * Renders icon, title, optional description and CTA.
  */
 export function EmptyState({
   icon = "📋",
+  materialIcon,
   title,
   description,
   action,
 }: EmptyStateProps): React.ReactElement {
   return (
     <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm py-16 px-6 text-center">
-      {icon ? (
+      {materialIcon ? (
+        <span
+          className="material-symbols-outlined text-5xl text-outline-variant mb-4 inline-block"
+          aria-hidden
+        >
+          {materialIcon}
+        </span>
+      ) : icon ? (
         <p className="text-4xl mb-4" aria-hidden>
           {icon}
         </p>
