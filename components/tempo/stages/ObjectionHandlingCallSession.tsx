@@ -27,7 +27,6 @@ import type { AvatarRef } from "@/types";
 
 type ObjectionHandlingCallSessionProps = {
   attemptId: string;
-  faceId: string;
   audioStream: MediaStream;
   videoStream: MediaStream | null;
   onActive: () => void;
@@ -74,7 +73,6 @@ function hasLiveVideoTrack(stream: MediaStream | null): boolean {
  */
 export function ObjectionHandlingCallSession({
   attemptId,
-  faceId,
   audioStream,
   videoStream,
   onActive,
@@ -347,7 +345,7 @@ export function ObjectionHandlingCallSession({
         >
           {/* Single Avatar mount for the whole call — do not remount when connected flips. */}
           <div className="absolute inset-0">
-            <Avatar ref={voice.avatarRef} faceId={faceId} />
+            <Avatar ref={voice.avatarRef} />
           </div>
 
           {!connected && (

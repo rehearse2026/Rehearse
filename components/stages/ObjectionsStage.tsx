@@ -1,11 +1,11 @@
 /**
  * ObjectionsStage.tsx
- * Simli video-call stage for handling objections after the written pitch.
+ * Anam video-call stage for handling objections after the written pitch.
  */
 
 "use client";
 
-import { SimliCallStage } from "@/components/call/SimliCallStage";
+import { AvatarCallStage } from "@/components/call/AvatarCallStage";
 import { OBJECTIONS_COUNT } from "@/lib/constants";
 import type { Simulation, SimulationStage } from "@/types";
 
@@ -28,7 +28,7 @@ export function ObjectionsStage({
   onComplete,
 }: ObjectionsStageProps): React.ReactElement {
   return (
-    <SimliCallStage
+    <AvatarCallStage
       simulation={simulation}
       attemptId={attemptId}
       stage="objections"

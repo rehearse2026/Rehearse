@@ -1,6 +1,6 @@
 /**
  * CallLayout.tsx
- * Active Simli video-call overlay — Stitch immersive in-call design.
+ * Active Anam video-call overlay — Stitch immersive in-call design.
  * Also exports shared call-stage layout class names used by Avatar and stages.
  */
 

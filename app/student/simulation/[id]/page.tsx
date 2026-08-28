@@ -266,7 +266,6 @@ export default async function StudentSimulationPage({
         simulationId={simulation.id}
         classId={classId}
         simulationTitle={simulation.title}
-        simliFaceId={simulation.simli_face_id}
         initialShowHandoff={!discoveryHandoffSeen}
         resetStoredPrep={testStageDiscovery}
       />
@@ -289,7 +288,6 @@ export default async function StudentSimulationPage({
         classId={classId}
         simulationTitle={simulation.title}
         presentationSummary={presentationSummary}
-        simliFaceId={simulation.simli_face_id}
       />
     );
   } else if (showTempoNegotiation) {

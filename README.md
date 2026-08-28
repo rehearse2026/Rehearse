@@ -1,14 +1,14 @@
 # Rehearse — AI Sales Training Platform
 
-Rehearse is a full-stack sales training app built on the Simli voice avatar stack. Students complete a 6-stage simulation (lead gen → close); teachers create and publish scenarios.
+Rehearse is a full-stack sales training app. Students complete a 6-stage simulation (lead gen → close); teachers create and publish scenarios.
 
 ## Stack
 
-- **Next.js 13** App Router (`version-simli/`)
+- **Next.js 13** App Router
 - **Supabase** — Postgres + Auth
-- **Simli** — WebRTC avatar (`Avatar.tsx`)
+- **Anam** — WebRTC avatar for Discovery and Objection Handling (`Avatar.tsx`)
 - **OpenAI GPT-4o** — Persona replies + stage scoring
-- **ElevenLabs** + **Deepgram** — TTS / STT
+- **ElevenLabs** + **Deepgram** — TTS / STT (Prospecting and legacy voice paths)
 
 ## Setup
 
@@ -17,18 +17,16 @@ Rehearse is a full-stack sales training app built on the Simli voice avatar stac
 3. Install and run:
 
 ```bash
-cd version-simli
 npm install
 npm run dev
 ```
 
 ## Environment variables
 
-See `.env.example` for OpenAI, ElevenLabs, Deepgram, Simli, and Supabase keys.
+See `.env.example` for OpenAI, ElevenLabs, Deepgram, Anam, and Supabase keys.
 
 ## Deploy (Vercel)
 
-- **Root directory:** `version-simli`
 - Add all env vars from `.env.local`
 - `npm run build` must pass before deploy
 
@@ -39,4 +37,4 @@ vercel --prod
 
 ## Project layout
 
-See the Cursor spec for `app/(auth)`, `app/(student)`, `app/(teacher)`, `components/stages/`, and `lib/supabase/`.
+See `CODE_GUIDELINES.md` for folder structure and conventions.

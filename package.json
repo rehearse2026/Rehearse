@@ -17,8 +17,7 @@
     "next": "13.5.8",
     "openai": "^6.34.0",
     "react": "^18",
-    "react-dom": "^18",
-    "simli-client": "^3.0.1"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",

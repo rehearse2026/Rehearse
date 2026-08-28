@@ -1,11 +1,11 @@
 /**
  * constants.ts
- * Named constants for Rehearse — audio, STT, stages, scoring, and Simli tuning.
+ * Named constants for Rehearse — audio, STT, stages, scoring, and avatar tuning.
  */
 
 import type { SimulationStage } from "@/types";
 
-// ── Audio / Simli PCM ─────────────────────────────────────────────────────────
+// ── Audio / PCM ───────────────────────────────────────────────────────────────
 
 export const PCM_CHUNK_SIZE = 8192;
 export const SAMPLE_RATE_HZ = 16000;
@@ -26,7 +26,7 @@ export const VOICE_UTTERANCE_END_MS = 1800;
 /** Cooldown after persona TTS before accepting the next student utterance. */
 export const POST_SPEAK_COOLDOWN_MS = 400;
 
-/** Tempo Simli call stages — tuned for responsive turn-taking without clipping. */
+/** Tempo Anam call stages — tuned for responsive turn-taking without clipping. */
 export const SIMULATION_VOICE_ENDPOINTING_MS = 550;
 export const SIMULATION_VOICE_UTTERANCE_END_MS = 1200;
 export const SIMULATION_VOICE_DEBOUNCE_MS = 700;
@@ -43,17 +43,12 @@ export const MAX_TOKENS = 120;
 export const MAX_SCORE_TOKENS = 500;
 export const DEBOUNCE_MS = 1200;
 
-// ── Simli ─────────────────────────────────────────────────────────────────────
+// ── Anam avatar ───────────────────────────────────────────────────────────────
 
-/** Max wait for Simli WebRTC + ack before showing a connection error. */
-export const SIMLI_CONNECT_TIMEOUT_MS = 15_000;
+/** Max wait for Anam WebRTC session + stream before showing a connection error. */
+export const ANAM_CONNECT_TIMEOUT_MS = 15_000;
 
 export const POST_CONNECT_ACK_WAIT_MS = 300;
-export const SIMLI_MAX_SESSION_LENGTH_SEC = 3600;
-export const SIMLI_MAX_IDLE_TIME_SEC = 300;
-
-/** Simli avatar face — same id used for video calls and stored on simulations. */
-export const SIMLI_FACE_ID = process.env.NEXT_PUBLIC_SIMLI_FACE_ID ?? "";
 
 /** Brief pause after end call before revealing the stage score UI. */
 export const CALL_SCORE_DELAY_MS = 1500;
@@ -103,10 +98,10 @@ export const PRESENTATION_MIN_WORDS = 100;
 
 export const OBJECTIONS_COUNT = 3;
 
-/** Stages that use Simli video (camera + avatar). */
-export const SIMLI_VIDEO_STAGES = ["discovery", "objections"] as const;
+/** Stages that use Anam video (camera + avatar). */
+export const AVATAR_VIDEO_STAGES = ["discovery", "objections"] as const;
 
-/** Stages that use voice-only phone UI (no Simli, no camera). */
+/** Stages that use voice-only phone UI (no avatar video, no camera). */
 export const VOICE_ONLY_STAGES = ["prospecting", "close"] as const;
 
 // ── Routes ──────────────────────────────────────────────────────────────────────
@@ -183,7 +178,7 @@ export const SIMULATION_ENTRY_LOADER_MS = 500;
 export const STAGE_TRANSITION_MS = 200;
 export const CALL_CONTROL_BAR_BOTTOM_PX = 80;
 export const CALL_TRANSCRIPT_MAX_HEIGHT_PX = 128;
-/** Taller transcript strip during Simli video calls. */
+/** Taller transcript strip during avatar video calls. */
 export const CALL_TRANSCRIPT_VIDEO_COMPACT_MAX_HEIGHT_PX = 132;
 export const PHONE_INITIALS_SIZE_PX = 96;
 export const PHONE_WAVEFORM_BAR_COUNT = 24;

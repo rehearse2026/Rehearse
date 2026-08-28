@@ -1,6 +1,6 @@
 /**
  * PhoneCallStage.tsx
- * Prospecting flow: lobby → connect → active phone UI → score (no Simli, no camera).
+ * Prospecting flow: lobby → connect → active phone UI → score (no avatar video, no camera).
  */
 
 "use client";

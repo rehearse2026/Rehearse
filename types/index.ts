@@ -162,7 +162,7 @@ export type ClassSimulation = {
 
 /** Imperative handle exposed by Avatar for TTS playback and interruption. */
 export interface AvatarRef {
-  /** Starts Simli WebRTC — call from a user gesture (Join Call). */
+  /** Starts Anam WebRTC session — call from a user gesture (Join Call). */
   startSession: () => Promise<boolean>;
   /** Resolves when Dana video + audio elements are mounted in the DOM. */
   waitForMediaElements: (maxMs?: number) => Promise<boolean>;

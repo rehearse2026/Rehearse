@@ -1,6 +1,6 @@
 /**
  * ProspectingStage.tsx
- * Phone-call UI (voice only, no Simli) via PhoneCallStage orchestrator.
+ * Phone-call UI (voice only, no avatar video) via PhoneCallStage orchestrator.
  */
 
 "use client";

@@ -1,5 +1,5 @@
 /**
- * SimliCallStage.tsx
+ * AvatarCallStage.tsx
  * Orchestrates lobby → Anam connect → active call → score for Discovery and Objections.
  * Avatar mounts once after Join Call and is not remounted until the call ends.
  */
@@ -23,7 +23,7 @@ import type { AvatarRef, Simulation, SimulationStage } from "@/types";
 
 type CallPhase = "lobby" | "connecting" | "active" | "scoring" | "scored";
 
-type SimliCallStageProps = {
+type AvatarCallStageProps = {
   simulation: Simulation;
   attemptId: string;
   stage: SimulationStage;
@@ -61,9 +61,9 @@ async function waitForAvatarReady(
 }
 
 /**
- * Shared video-call flow for all Simli-powered simulation stages.
+ * Shared video-call flow for Anam-powered Discovery and Objections stages.
  */
-export function SimliCallStage({
+export function AvatarCallStage({
   simulation,
   attemptId,
   stage,
@@ -76,7 +76,7 @@ export function SimliCallStage({
   advanceLabel,
   onAdvance,
   topBanner,
-}: SimliCallStageProps): React.ReactElement {
+}: AvatarCallStageProps): React.ReactElement {
   const [phase, setPhase] = useState<CallPhase>("lobby");
   const [mountAvatar, setMountAvatar] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);

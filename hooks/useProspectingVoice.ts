@@ -1,6 +1,6 @@
 /**
  * useProspectingVoice.ts
- * Voice-only prospecting: Deepgram + GPT + ElevenLabs (no Simli).
+ * Voice-only prospecting: Deepgram + GPT + ElevenLabs (no avatar video).
  * Audio services start only after Join Call; stream supplied by useVideoCall.
  */
 

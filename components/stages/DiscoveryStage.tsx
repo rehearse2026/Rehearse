@@ -1,11 +1,11 @@
 /**
  * DiscoveryStage.tsx
- * Simli video-call stage — uses shared SimliCallStage orchestrator.
+ * Anam video-call stage — uses shared AvatarCallStage orchestrator.
  */
 
 "use client";
 
-import { SimliCallStage } from "@/components/call/SimliCallStage";
+import { AvatarCallStage } from "@/components/call/AvatarCallStage";
 import type { Simulation, SimulationStage } from "@/types";
 
 type DiscoveryStageProps = {
@@ -25,7 +25,7 @@ export function DiscoveryStage({
   onComplete,
 }: DiscoveryStageProps): React.ReactElement {
   return (
-    <SimliCallStage
+    <AvatarCallStage
       simulation={simulation}
       attemptId={attemptId}
       stage="discovery"

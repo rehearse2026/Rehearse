@@ -22,7 +22,7 @@ import {
   CALL_PERSONA_VIDEO_FRAME_CLASS,
   CALL_PERSONA_VIDEO_GRADIENT_CLASS,
 } from "@/components/call/CallLayout";
-import { SIMLI_CONNECT_TIMEOUT_MS } from "@/lib/constants";
+import { ANAM_CONNECT_TIMEOUT_MS } from "@/lib/constants";
 import type { AvatarRef, SpeakAudioPayload } from "@/types";
 
 export type { AvatarRef } from "@/types";
@@ -218,12 +218,7 @@ async function beginStreamingInternal(stream?: MediaStream): Promise<void> {
   }
 }
 
-type AvatarProps = {
-  /** @deprecated Anam avatar IDs come from the server session token. */
-  faceId?: string;
-};
-
-export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props, ref) {
+export const Avatar = forwardRef<AvatarRef>(function Avatar(_props, ref) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const isReadyRef = useRef(false);
   const sessionStartingRef = useRef(false);
@@ -254,7 +249,7 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
 
     if (sessionStartingRef.current) {
       const start = Date.now();
-      while (sessionStartingRef.current && Date.now() - start < SIMLI_CONNECT_TIMEOUT_MS) {
+      while (sessionStartingRef.current && Date.now() - start < ANAM_CONNECT_TIMEOUT_MS) {
         await new Promise<void>((resolve) => setTimeout(resolve, 200));
       }
       return isReadyRef.current && sharedClient !== null;
@@ -323,8 +318,8 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
       if (inputStreamRef) {
         await withTimeout(
           beginStreamingInternal(inputStreamRef),
-          SIMLI_CONNECT_TIMEOUT_MS,
-          `Anam did not connect within ${SIMLI_CONNECT_TIMEOUT_MS / 1000}s.`
+          ANAM_CONNECT_TIMEOUT_MS,
+          `Anam did not connect within ${ANAM_CONNECT_TIMEOUT_MS / 1000}s.`
         );
       }
 
@@ -393,7 +388,7 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
       startSession,
       waitForMediaElements,
       isReady: (): boolean => isReadyRef.current && sharedClient !== null,
-      waitUntilReady: async (maxMs = SIMLI_CONNECT_TIMEOUT_MS): Promise<boolean> => {
+      waitUntilReady: async (maxMs = ANAM_CONNECT_TIMEOUT_MS): Promise<boolean> => {
         if (isReadyRef.current && sharedClient) {
           return true;
         }
@@ -436,8 +431,8 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
         }
         await withTimeout(
           beginStreamingInternal(audioStream),
-          SIMLI_CONNECT_TIMEOUT_MS,
-          `Anam stream did not start within ${SIMLI_CONNECT_TIMEOUT_MS / 1000}s.`
+          ANAM_CONNECT_TIMEOUT_MS,
+          `Anam stream did not start within ${ANAM_CONNECT_TIMEOUT_MS / 1000}s.`
         );
         isReadyRef.current = true;
         setIsReady(true);
@@ -456,7 +451,7 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
           audioStream
         );
       },
-      waitForSessionReady: async (maxMs = SIMLI_CONNECT_TIMEOUT_MS): Promise<void> => {
+      waitForSessionReady: async (maxMs = ANAM_CONNECT_TIMEOUT_MS): Promise<void> => {
         if (!sharedClient) {
           throw new Error("Anam client not ready — could not wait for session.");
         }

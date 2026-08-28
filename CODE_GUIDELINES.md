@@ -18,7 +18,7 @@ Rehearse/
 │   ├── layout.tsx
 │   └── page.tsx
 ├── components/
-│   └── Avatar.tsx              # Simli WebRTC (reuse; do not break AvatarRef)
+│   └── Avatar.tsx              # Anam WebRTC (reuse; do not break AvatarRef)
 ├── hooks/                       # Voice session orchestration
 ├── lib/
 │   ├── constants.ts            # All magic numbers
@@ -79,4 +79,4 @@ Remove commented-out blocks, unused files, unused imports.
 
 ## Env template
 
-See `.env.example` for OpenAI, ElevenLabs, Deepgram, Simli, Supabase.
+See `.env.example` for OpenAI, ElevenLabs, Deepgram, Anam, and Supabase.

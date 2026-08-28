@@ -30,7 +30,6 @@ export function SimulationForm({
   const [personaName, setPersonaName] = useState(initial?.persona_name ?? "");
   const [personaRole, setPersonaRole] = useState(initial?.persona_role ?? "");
   const [personaPrompt, setPersonaPrompt] = useState(initial?.persona_system_prompt ?? "");
-  const [simliFaceId, setSimliFaceId] = useState(initial?.simli_face_id ?? "");
   const [productContext, setProductContext] = useState(initial?.product_context ?? "");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +38,7 @@ export function SimulationForm({
     setIsLoading(true);
     setError("");
 
-    if (!title || !personaName || !personaRole || !personaPrompt || !productContext || !simliFaceId) {
+    if (!title || !personaName || !personaRole || !personaPrompt || !productContext) {
       setError("Please fill in all required fields.");
       setIsLoading(false);
       return;
@@ -53,7 +52,6 @@ export function SimulationForm({
       persona_role: personaRole,
       persona_system_prompt: personaPrompt,
       product_context: productContext,
-      simli_face_id: simliFaceId,
       is_published: initial?.is_published ?? false,
     };
 
@@ -136,12 +134,6 @@ export function SimulationForm({
               rows={8}
               value={personaPrompt}
               onChange={(e) => setPersonaPrompt(e.target.value)}
-            />
-            <input
-              placeholder="Simli face ID"
-              className="input-field"
-              value={simliFaceId}
-              onChange={(e) => setSimliFaceId(e.target.value)}
             />
           </section>
         </div>

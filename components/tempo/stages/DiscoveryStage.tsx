@@ -20,7 +20,6 @@ import { DiscoveryStageLayout } from "@/components/tempo/stages/DiscoveryStageLa
 import { DiscoveryTopBar } from "@/components/tempo/stages/DiscoveryTopBar";
 import { resumePlaybackContext } from "@/lib/audio-playback";
 import { completeStage } from "@/lib/attempt-actions";
-import { SIMLI_FACE_ID } from "@/lib/constants";
 import {
   EMPTY_DISCOVERY_PRE_CALL_PREP,
   clearDiscoveryPrepFromStorage,
@@ -40,7 +39,6 @@ type DiscoveryStageProps = {
   simulationId: string;
   classId: string;
   simulationTitle: string;
-  simliFaceId?: string;
   /** Show the manager handoff on mount (student has not clicked Begin Stage 2 yet). */
   initialShowHandoff?: boolean;
   /** Skip restoring local prep (Test → Discovery jumps). */
@@ -55,7 +53,6 @@ export function DiscoveryStage({
   simulationId,
   classId,
   simulationTitle,
-  simliFaceId,
   initialShowHandoff = false,
   resetStoredPrep = false,
 }: DiscoveryStageProps): React.ReactElement {
@@ -78,7 +75,6 @@ export function DiscoveryStage({
   const submittingRef = useRef(false);
   const prepFormRef = useRef(prepForm);
 
-  const faceId = simliFaceId?.trim() || SIMLI_FACE_ID;
   const discoveryMeta = TEMPO_HANDOFF_STAGE_META.discovery;
   const presentationMeta = TEMPO_HANDOFF_STAGE_META.presentation;
 
@@ -230,7 +226,6 @@ export function DiscoveryStage({
               (phase === "connecting" || phase === "active") && audioStream ? (
                 <DiscoveryCallSession
                   attemptId={attemptId}
-                  faceId={faceId}
                   audioStream={audioStream}
                   onActive={handleCallActive}
                   onError={handleCallError}

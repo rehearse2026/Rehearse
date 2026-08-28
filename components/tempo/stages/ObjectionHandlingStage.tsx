@@ -1,6 +1,6 @@
 /**
  * ObjectionHandlingStage.tsx
- * Stage 4 of the Tempo simulation — live Simli video call with Dr. Saul Kim.
+ * Stage 4 of the Tempo simulation — live Anam video call with Dr. Saul Kim.
  * Flow: pre-call lobby → active video call → auto-submit (no post-call form).
  * Objection tracker is live in-call feedback derived from the transcript.
  * Only used in the Tempo/Default simulation.
@@ -23,7 +23,6 @@ import { ObjectionHandlingStageLayout } from "@/components/tempo/stages/Objectio
 import { ObjectionHandlingTopBar } from "@/components/tempo/stages/ObjectionHandlingTopBar";
 import { resumePlaybackContext } from "@/lib/audio-playback";
 import { completeStage } from "@/lib/attempt-actions";
-import { SIMLI_FACE_ID } from "@/lib/constants";
 import type { PresentationForm } from "@/lib/tempo-presentation";
 import {
   EMPTY_TRACKER,
@@ -42,7 +41,6 @@ type ObjectionHandlingStageProps = {
   classId: string;
   simulationTitle: string;
   presentationSummary: PresentationForm | null;
-  simliFaceId?: string;
 };
 
 /**
@@ -54,7 +52,6 @@ export function ObjectionHandlingStage({
   classId,
   simulationTitle,
   presentationSummary,
-  simliFaceId,
 }: ObjectionHandlingStageProps): React.ReactElement {
   const router = useRouter();
   const [phase, setPhase] = useState<ObjectionHandlingPhase>("lobby");
@@ -71,7 +68,6 @@ export function ObjectionHandlingStage({
 
   const submittingRef = useRef(false);
 
-  const faceId = simliFaceId?.trim() || SIMLI_FACE_ID;
   const objectionsMeta = TEMPO_HANDOFF_STAGE_META.objections;
   const negotiationMeta = TEMPO_HANDOFF_STAGE_META.negotiation;
 
@@ -174,10 +170,9 @@ export function ObjectionHandlingStage({
           }
           callSlot={
             (phase === "connecting" || phase === "active") && audioStream ? (
-              <ObjectionHandlingCallSession
-                attemptId={attemptId}
-                faceId={faceId}
-                audioStream={audioStream}
+                <ObjectionHandlingCallSession
+                  attemptId={attemptId}
+                  audioStream={audioStream}
                 videoStream={videoStream}
                 onActive={handleCallActive}
                 onError={handleCallError}

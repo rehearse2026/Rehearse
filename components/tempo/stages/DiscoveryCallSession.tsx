@@ -1,12 +1,12 @@
 /**
  * DiscoveryCallSession.tsx
- * Audio Simli voice call for Tempo Stage 2 Discovery.
+ * Anam voice call for Tempo Stage 2 Discovery.
  * Receives the microphone stream the student enabled in the lobby — it never
  * calls getUserMedia itself, so no device indicator turns on here. Bubbles
  * transcript, timer, and end-of-call data up to the parent DiscoveryStage.
  *
  * Avatar must stay mounted for the whole call (no remount on connect) — remounting
- * tears down the Simli WebRTC session and silences Dana.
+ * tears down the Anam WebRTC session and silences Dana.
  */
 
 "use client";
@@ -30,7 +30,6 @@ import type { AvatarRef } from "@/types";
 
 type DiscoveryCallSessionProps = {
   attemptId: string;
-  faceId: string;
   audioStream: MediaStream;
   onActive: () => void;
   onError: (message: string) => void;
@@ -69,7 +68,6 @@ async function waitForAvatarReady(
  */
 export function DiscoveryCallSession({
   attemptId,
-  faceId,
   audioStream,
   onActive,
   onError,
@@ -208,7 +206,7 @@ export function DiscoveryCallSession({
     <section className="flex-1 bg-[#0a0a0a] relative flex flex-col items-center justify-center p-lg min-w-0 overflow-hidden">
       <div className="relative w-full max-w-xl aspect-video rounded-2xl overflow-hidden border border-white/15 shadow-2xl bg-black">
         {/* Single Avatar mount for the whole call — do not remount when connected flips. */}
-        <Avatar ref={voice.avatarRef} faceId={faceId} />
+        <Avatar ref={voice.avatarRef} />
 
         {!connected && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70">
