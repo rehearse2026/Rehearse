@@ -79,11 +79,26 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { data: simulation, error: simulationError } = await supabase
       .from("simulations")
-      .select("anam_avatar_ids, anam_voice_ids")
+      .select("id, anam_avatar_ids, anam_voice_ids")
       .eq("id", attempt.simulation_id)
       .maybeSingle();
 
-    if (simulationError || !simulation) {
+    if (simulationError) {
+      console.error("[anam-session] simulation lookup failed:", simulationError);
+      const message = simulationError.message ?? "Simulation lookup failed.";
+      const needsMigration =
+        message.includes("anam_avatar_ids") || message.includes("anam_voice_ids");
+      return NextResponse.json(
+        {
+          error: needsMigration
+            ? "Anam columns missing on simulations table. Run supabase/anam-ids-migration.sql in Supabase SQL Editor."
+            : `Simulation lookup failed: ${message}`,
+        },
+        { status: needsMigration ? 500 : 500 }
+      );
+    }
+
+    if (!simulation) {
       return NextResponse.json({ error: "Simulation not found." }, { status: 404 });
     }
 
