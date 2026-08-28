@@ -48,6 +48,7 @@ export type ExtendedAvatarRef = AvatarRef & {
   configureSession: (config: AvatarSessionConfig) => void;
   beginStreaming: (audioStream?: MediaStream) => Promise<void>;
   updateInputStream: (audioStream: MediaStream) => Promise<void>;
+  waitForSessionReady: (maxMs?: number) => Promise<void>;
   talk: (text: string) => Promise<void>;
   setInputMuted: (muted: boolean) => void;
   endSession: () => Promise<void>;
@@ -65,6 +66,20 @@ let listenersRegistered = false;
 let sessionEndRequested = false;
 let lastInitError: string | null = null;
 let activeSessionStageRef: AnamSessionStage | null = null;
+let sessionReadyFired = false;
+const sessionReadyWaiters: Array<() => void> = [];
+
+function resetSessionReadyState(): void {
+  sessionReadyFired = false;
+  sessionReadyWaiters.length = 0;
+}
+
+function notifySessionReady(): void {
+  sessionReadyFired = true;
+  while (sessionReadyWaiters.length > 0) {
+    sessionReadyWaiters.pop()?.();
+  }
+}
 
 /**
  * Last error from startSession / beginStreaming (for callers to surface in UI).
@@ -102,7 +117,12 @@ function registerClientListeners(client: AnamClient): void {
 
   client.addListener(AnamEvent.CONNECTION_CLOSED, (reason: string, details?: string) => {
     isStreamingActive = false;
+    resetSessionReadyState();
     voiceCallbacks.onConnectionClosed?.(reason, details);
+  });
+
+  client.addListener(AnamEvent.SESSION_READY, () => {
+    notifySessionReady();
   });
 
   listenersRegistered = true;
@@ -117,6 +137,7 @@ async function endSharedSession(): Promise<void> {
   listenersRegistered = false;
   inputStreamRef = null;
   activeSessionStageRef = null;
+  resetSessionReadyState();
 
   if (client) {
     await client.stopStreaming().catch(() => undefined);
@@ -132,6 +153,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
     timeoutId = setTimeout(() => reject(new Error(message)), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId)) as Promise<T>;
+}
+
+function waitForAnamSessionReady(maxMs: number): Promise<void> {
+  if (sessionReadyFired) {
+    return Promise.resolve();
+  }
+  return withTimeout(
+    new Promise<void>((resolve) => {
+      sessionReadyWaiters.push(resolve);
+    }),
+    maxMs,
+    `Anam session did not become ready within ${maxMs / 1000}s.`
+  );
 }
 
 /**
@@ -400,6 +434,12 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
           ANAM_PERSONA_VIDEO_ELEMENT_ID,
           audioStream
         );
+      },
+      waitForSessionReady: async (maxMs = SIMLI_CONNECT_TIMEOUT_MS): Promise<void> => {
+        if (!sharedClient) {
+          throw new Error("Anam client not ready — could not wait for session.");
+        }
+        await waitForAnamSessionReady(maxMs);
       },
       talk: async (text: string): Promise<void> => {
         if (!sharedClient?.isStreaming()) {

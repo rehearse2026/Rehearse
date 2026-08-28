@@ -116,6 +116,7 @@ export function useSimulationVoiceSession(
   const configRef = useRef(config);
   const pendingUtteranceRef = useRef("");
   const processedUserMessageIdsRef = useRef<Set<string>>(new Set());
+  const greetingDeliveredRef = useRef(false);
 
   useEffect(() => {
     configRef.current = config;
@@ -323,6 +324,11 @@ export function useSimulationVoiceSession(
         return;
       }
 
+      // Ignore mic/STT until the scripted opening greeting has been delivered.
+      if (!greetingDeliveredRef.current) {
+        return;
+      }
+
       setUserTranscripts(trimmed);
 
       if (!canProcessStudentSpeech()) {
@@ -402,7 +408,7 @@ export function useSimulationVoiceSession(
         setUserTranscripts("");
         setPersonaTranscripts("");
         pendingUtteranceRef.current = "";
-        canListenAfterRef.current = Date.now() + SIMULATION_POST_SPEAK_COOLDOWN_MS;
+        greetingDeliveredRef.current = false;
 
         const sessionReady = await avatar?.waitUntilReady();
         if (!sessionReady) {
@@ -412,13 +418,26 @@ export function useSimulationVoiceSession(
           );
         }
 
+        avatar?.setInputMuted(true);
         await avatar?.beginStreaming(audioStream);
+        await avatar?.waitForSessionReady();
 
         const greeting =
           configRef.current.openingGreeting ?? buildDefaultOpeningGreeting();
+        const greetingMessage: ChatMessage = { role: "assistant", content: greeting };
 
-        setStatusText("Live — wait for persona to finish, then speak.");
+        setStatusText("Persona is greeting you…");
         await speakPersona(greeting);
+
+        messagesRef.current = [greetingMessage];
+        setMessages([greetingMessage]);
+        greetingDeliveredRef.current = true;
+        pendingUtteranceRef.current = "";
+        canListenAfterRef.current = Date.now() + SIMULATION_POST_SPEAK_COOLDOWN_MS;
+
+        if (!isMicMuted()) {
+          avatar?.setInputMuted(false);
+        }
       } catch (err) {
         console.error(err);
         setStatusText(
