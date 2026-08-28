@@ -16,6 +16,7 @@ import {
 import { buildDefaultOpeningGreeting } from "@/lib/persona";
 import { buildVoiceSystemPrompt } from "@/lib/persona-voice";
 import {
+  getAvatarInitError,
   setAvatarSessionConfig,
   setAvatarVoiceCallbacks,
   type AnamSessionStage,
@@ -90,6 +91,13 @@ function getExtendedAvatar(ref: AvatarRef | null): ExtendedAvatarRef | null {
 export function useSimulationVoiceSession(
   config: SimulationVoiceConfig
 ): SimulationVoiceReturn {
+  // Synchronous — must be set before any connect effect calls startSession.
+  const initialAttemptId = resolveAttemptId(config.attemptId);
+  const initialStage = resolveAnamStage(config.systemPrompt, config.anamStage);
+  if (initialAttemptId && initialStage) {
+    setAvatarSessionConfig({ attemptId: initialAttemptId, stage: initialStage });
+  }
+
   const [isActive, setIsActive] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [userTranscripts, setUserTranscripts] = useState("");
@@ -395,6 +403,14 @@ export function useSimulationVoiceSession(
         setPersonaTranscripts("");
         pendingUtteranceRef.current = "";
         canListenAfterRef.current = Date.now() + SIMULATION_POST_SPEAK_COOLDOWN_MS;
+
+        const sessionReady = await avatar?.waitUntilReady();
+        if (!sessionReady) {
+          throw new Error(
+            getAvatarInitError() ??
+              "Could not connect to persona in time. Check Anam configuration and try again."
+          );
+        }
 
         await avatar?.beginStreaming(audioStream);
 

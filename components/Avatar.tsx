@@ -63,6 +63,14 @@ let sessionConfigRef: AvatarSessionConfig | null = null;
 let voiceCallbacks: AvatarVoiceCallbacks = {};
 let listenersRegistered = false;
 let sessionEndRequested = false;
+let lastInitError: string | null = null;
+
+/**
+ * Last error from startSession / beginStreaming (for callers to surface in UI).
+ */
+export function getAvatarInitError(): string | null {
+  return lastInitError;
+}
 
 /**
  * Sets attempt/stage before startSession (called from voice hook).
@@ -210,6 +218,7 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
     sessionStartingRef.current = true;
     setIsConnecting(true);
     setInitError(null);
+    lastInitError = null;
 
     try {
       const tokenRes = await fetch("/api/student/anam-session", {
@@ -261,6 +270,7 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
       console.error("Anam session failed:", connectError);
       const msg =
         connectError instanceof Error ? connectError.message : "Could not connect to Anam.";
+      lastInitError = msg;
       setInitError(msg);
       return false;
     } finally {
@@ -350,7 +360,12 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
       },
       beginStreaming: async (audioStream?: MediaStream): Promise<void> => {
         if (!sharedClient) {
-          throw new Error("Anam client not ready — call startSession first.");
+          const ready = await startSession();
+          if (!ready || !sharedClient) {
+            throw new Error(
+              lastInitError ?? "Anam client not ready — could not start session."
+            );
+          }
         }
         await withTimeout(
           beginStreamingInternal(audioStream),

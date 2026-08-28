@@ -229,6 +229,7 @@ export function DiscoveryStage({
             callSlot={
               (phase === "connecting" || phase === "active") && audioStream ? (
                 <DiscoveryCallSession
+                  attemptId={attemptId}
                   faceId={faceId}
                   audioStream={audioStream}
                   onActive={handleCallActive}

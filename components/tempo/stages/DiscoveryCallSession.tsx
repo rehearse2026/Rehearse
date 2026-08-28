@@ -29,6 +29,7 @@ import { useSimulationVoiceSession } from "@/hooks/useSimulationVoiceSession";
 import type { AvatarRef } from "@/types";
 
 type DiscoveryCallSessionProps = {
+  attemptId: string;
   faceId: string;
   audioStream: MediaStream;
   onActive: () => void;
@@ -67,6 +68,7 @@ async function waitForAvatarReady(
  * Mounts the voice session on the lobby-supplied stream and renders call UI.
  */
 export function DiscoveryCallSession({
+  attemptId,
   faceId,
   audioStream,
   onActive,
@@ -89,6 +91,8 @@ export function DiscoveryCallSession({
     stageHint: TEMPO_DISCOVERY_STAGE_HINT,
     openingGreeting: TEMPO_DISCOVERY_OPENING_GREETING,
     isMutedRef,
+    attemptId,
+    anamStage: "discovery",
   });
 
   const voiceRef = useRef(voice);
@@ -113,29 +117,23 @@ export function DiscoveryCallSession({
         return;
       }
 
-      avatar.resumeAudioContext();
-
-      const simliReady = await avatar.startSession();
-      if (!simliReady) {
-        callbacksRef.current.onError(
-          "Could not connect to Dana Reyes in time. Check Simli keys and try again."
-        );
-        return;
-      }
-
       if (audioStream.getAudioTracks().length === 0) {
         callbacksRef.current.onError("Microphone stream unavailable. Reload and try again.");
         return;
       }
 
       try {
-        await voiceRef.current.startCall(audioStream);
         avatar.resumeAudioContext();
+        await voiceRef.current.startCall(audioStream);
         await resumePlaybackContext();
         setConnected(true);
         callbacksRef.current.onActive();
-      } catch {
-        callbacksRef.current.onError("Could not start voice session. Reload and try again.");
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Could not start voice session. Reload and try again.";
+        callbacksRef.current.onError(message);
       }
     };
 

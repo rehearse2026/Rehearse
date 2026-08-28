@@ -175,6 +175,7 @@ export function ObjectionHandlingStage({
           callSlot={
             (phase === "connecting" || phase === "active") && audioStream ? (
               <ObjectionHandlingCallSession
+                attemptId={attemptId}
                 faceId={faceId}
                 audioStream={audioStream}
                 videoStream={videoStream}

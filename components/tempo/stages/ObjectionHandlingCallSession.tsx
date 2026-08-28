@@ -26,6 +26,7 @@ import { useSimulationVoiceSession } from "@/hooks/useSimulationVoiceSession";
 import type { AvatarRef } from "@/types";
 
 type ObjectionHandlingCallSessionProps = {
+  attemptId: string;
   faceId: string;
   audioStream: MediaStream;
   videoStream: MediaStream | null;
@@ -72,6 +73,7 @@ function hasLiveVideoTrack(stream: MediaStream | null): boolean {
  * Mounts Simli voice session with visible video avatar and student PiP.
  */
 export function ObjectionHandlingCallSession({
+  attemptId,
   faceId,
   audioStream,
   videoStream,
@@ -101,6 +103,8 @@ export function ObjectionHandlingCallSession({
     stageHint: TEMPO_OBJECTIONS_STAGE_HINT,
     openingGreeting: TEMPO_OBJECTIONS_OPENING_GREETING,
     isMutedRef,
+    attemptId,
+    anamStage: "objections",
   });
 
   const voiceRef = useRef(voice);
@@ -163,27 +167,22 @@ export function ObjectionHandlingCallSession({
         return;
       }
 
-      avatar.resumeAudioContext();
-
-      const simliReady = await avatar.startSession();
-      if (!simliReady) {
-        callbacksRef.current.onError(
-          "Could not connect to Dr. Kim in time. Check Simli keys and try again."
-        );
-        return;
-      }
-
       if (audioStream.getAudioTracks().length === 0) {
         callbacksRef.current.onError("Microphone stream unavailable. Reload and try again.");
         return;
       }
 
       try {
+        avatar.resumeAudioContext();
         await voiceRef.current.startCall(audioStream);
         setConnected(true);
         callbacksRef.current.onActive();
-      } catch {
-        callbacksRef.current.onError("Could not start voice session. Reload and try again.");
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Could not start voice session. Reload and try again.";
+        callbacksRef.current.onError(message);
       }
     };
 
