@@ -14,22 +14,9 @@ COMMENT ON COLUMN public.simulations.anam_avatar_ids IS
 COMMENT ON COLUMN public.simulations.anam_voice_ids IS
   'Per-stage Anam voice UUIDs, e.g. {"discovery":"…","objections":"…"}';
 
--- Tempo / Summit Dental simulation — replace placeholder UUIDs with your Anam dashboard IDs.
+-- Tempo / Summit Dental simulation — Dana (Discovery) + Dr. Kim (Objections)
 UPDATE public.simulations
 SET
-  anam_avatar_ids = COALESCE(anam_avatar_ids, '{}'::jsonb) || jsonb_build_object(
-    'discovery', COALESCE(anam_avatar_ids->>'discovery', ''),
-    'objections', COALESCE(anam_avatar_ids->>'objections', '')
-  ),
-  anam_voice_ids = COALESCE(anam_voice_ids, '{}'::jsonb) || jsonb_build_object(
-    'discovery', COALESCE(anam_voice_ids->>'discovery', ''),
-    'objections', COALESCE(anam_voice_ids->>'objections', '')
-  )
+  anam_avatar_ids = '{"discovery":"071b0286-4cce-4808-bee2-e642f1062de3","objections":"960f614f-ea88-47c3-9883-f02094f70874"}'::jsonb,
+  anam_voice_ids  = '{"discovery":"d338ed86-05e6-4ca0-a3fc-3d438ddb1a96","objections":"2e7fc41b-be40-49d8-a5ca-b26ab5775a33"}'::jsonb
 WHERE id = '00000000-0000-0000-0000-000000000002';
-
--- Example (uncomment and fill after copying IDs from https://lab.anam.ai):
--- UPDATE public.simulations
--- SET
---   anam_avatar_ids = '{"discovery":"<dana-avatar-uuid>","objections":"<kim-avatar-uuid>"}'::jsonb,
---   anam_voice_ids  = '{"discovery":"<dana-voice-uuid>","objections":"<kim-voice-uuid>"}'::jsonb
--- WHERE id = '00000000-0000-0000-0000-000000000002';

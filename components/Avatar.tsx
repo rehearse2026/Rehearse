@@ -64,6 +64,7 @@ let voiceCallbacks: AvatarVoiceCallbacks = {};
 let listenersRegistered = false;
 let sessionEndRequested = false;
 let lastInitError: string | null = null;
+let activeSessionStageRef: AnamSessionStage | null = null;
 
 /**
  * Last error from startSession / beginStreaming (for callers to surface in UI).
@@ -115,6 +116,7 @@ async function endSharedSession(): Promise<void> {
   isStreamingActive = false;
   listenersRegistered = false;
   inputStreamRef = null;
+  activeSessionStageRef = null;
 
   if (client) {
     await client.stopStreaming().catch(() => undefined);
@@ -215,6 +217,15 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
       return false;
     }
 
+    if (
+      activeSessionStageRef &&
+      activeSessionStageRef !== config.stage &&
+      sharedClient
+    ) {
+      await endSharedSession();
+      sessionEndRequested = false;
+    }
+
     sessionStartingRef.current = true;
     setIsConnecting(true);
     setInitError(null);
@@ -265,6 +276,7 @@ export const Avatar = forwardRef<AvatarRef, AvatarProps>(function Avatar(_props,
       kickVideoPlayback(videoRef.current);
       isReadyRef.current = true;
       setIsReady(true);
+      activeSessionStageRef = config.stage;
       return true;
     } catch (connectError) {
       console.error("Anam session failed:", connectError);

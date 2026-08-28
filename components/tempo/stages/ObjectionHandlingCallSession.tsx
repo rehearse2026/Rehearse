@@ -1,6 +1,6 @@
 /**
  * ObjectionHandlingCallSession.tsx
- * Simli video call for Tempo Stage 4 — Dr. Saul Kim with visible avatar feed,
+ * Anam video call for Tempo Stage 4 — Dr. Saul Kim with visible avatar feed,
  * student PiP, objection tracker, and call controls.
  */
 
@@ -70,7 +70,7 @@ function hasLiveVideoTrack(stream: MediaStream | null): boolean {
 }
 
 /**
- * Mounts Simli voice session with visible video avatar and student PiP.
+ * Mounts Anam voice session with visible video avatar and student PiP.
  */
 export function ObjectionHandlingCallSession({
   attemptId,
@@ -340,52 +340,59 @@ export function ObjectionHandlingCallSession({
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center px-4 pt-16 pb-4 min-h-0">
-        {!connected ? (
-          <div className="flex flex-col items-center justify-center">
-            <div className="w-10 h-10 border-2 border-white/20 border-t-tertiary-container rounded-full animate-spin" />
-            <p className="mt-4 text-sm text-white/70">Connecting to Dr. Saul Kim…</p>
-            <div className="pointer-events-none absolute opacity-0 h-px w-px overflow-hidden">
-              <Avatar ref={voice.avatarRef} faceId={faceId} />
-            </div>
+        <div
+          className={`relative w-full max-w-4xl aspect-video max-h-[min(56vh,calc(100%-1rem))] rounded-3xl overflow-hidden transition-all duration-700 ${
+            connected && isDrKimSpeaking ? "speaking-ring-gold" : "border border-white/10"
+          }`}
+        >
+          {/* Single Avatar mount for the whole call — do not remount when connected flips. */}
+          <div className="absolute inset-0">
+            <Avatar ref={voice.avatarRef} faceId={faceId} />
           </div>
-        ) : (
-          <div
-            className={`relative w-full max-w-4xl aspect-video max-h-[min(56vh,calc(100%-1rem))] rounded-3xl overflow-hidden transition-all duration-700 ${
-              isDrKimSpeaking ? "speaking-ring-gold" : "border border-white/10"
-            }`}
-          >
-            <div className="absolute inset-0">
-              <Avatar ref={voice.avatarRef} faceId={faceId} />
-            </div>
 
-            <div className="absolute bottom-6 left-6 glass-panel px-4 py-2 rounded-xl flex flex-col">
-              <span className="text-white font-bold text-title-lg">Dr. Saul Kim</span>
-              <span className="text-white/60 text-body-md">Founder & Owner</span>
-            </div>
-
-            <div
-              className={`absolute bottom-6 right-6 w-48 aspect-video rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-neutral-800 ${
-                isStudentSpeaking ? "speaking-ring-blue" : ""
-              }`}
-            >
-              <video
-                ref={studentVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`w-full h-full object-cover scale-x-[-1] ${showCameraPreview ? "" : "hidden"}`}
-              />
-              {!showCameraPreview && (
-                <div className="absolute inset-0 flex items-center justify-center bg-neutral-700">
-                  <MaterialIcon name="person" className="text-white/40 text-4xl" />
-                </div>
+          {!connected && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70">
+              <div className="w-10 h-10 border-2 border-white/20 border-t-tertiary-container rounded-full animate-spin" />
+              <p className="mt-4 text-sm text-white/70">Connecting to Dr. Saul Kim…</p>
+              {voice.statusText.length > 0 && (
+                <p className="mt-2 text-xs text-white/50 max-w-sm text-center px-4">
+                  {voice.statusText}
+                </p>
               )}
-              <div className="absolute bottom-2 left-2 text-[10px] text-white/80 bg-black/40 px-2 py-0.5 rounded uppercase tracking-tighter">
-                You (Student)
-              </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {connected && (
+            <>
+              <div className="absolute bottom-6 left-6 glass-panel px-4 py-2 rounded-xl flex flex-col z-10">
+                <span className="text-white font-bold text-title-lg">Dr. Saul Kim</span>
+                <span className="text-white/60 text-body-md">Founder & Owner</span>
+              </div>
+
+              <div
+                className={`absolute bottom-6 right-6 w-48 aspect-video rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-neutral-800 z-10 ${
+                  isStudentSpeaking ? "speaking-ring-blue" : ""
+                }`}
+              >
+                <video
+                  ref={studentVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover scale-x-[-1] ${showCameraPreview ? "" : "hidden"}`}
+                />
+                {!showCameraPreview && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-neutral-700">
+                    <MaterialIcon name="person" className="text-white/40 text-4xl" />
+                  </div>
+                )}
+                <div className="absolute bottom-2 left-2 text-[10px] text-white/80 bg-black/40 px-2 py-0.5 rounded uppercase tracking-tighter">
+                  You (Student)
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="shrink-0 py-5 px-4 flex items-center justify-center gap-6 border-t border-white/10 bg-black/30 backdrop-blur-md">
