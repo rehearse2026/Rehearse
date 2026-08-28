@@ -1,15 +1,18 @@
 /**
  * anam-session/route.ts
- * POST — mints a short-lived Anam session token for audio-passthrough avatar video.
+ * POST — mints a short-lived Anam session token for custom-LLM mode (CUSTOMER_CLIENT_V1).
+ * Anam runs STT + TTS + avatar video; Rehearse supplies GPT via client talk stream.
  * Server-only ANAM_API_KEY; client receives sessionToken + avatarId only.
  */
 
 import { NextResponse } from "next/server";
 import { requireStudentApi } from "@/lib/api-auth";
 import {
+  ANAM_CUSTOM_CLIENT_LLM_ID,
   getAnamAvatarId,
+  getAnamVoiceId,
   isAnamSessionStage,
-  normalizeAnamAvatarIds,
+  normalizeAnamIdMap,
 } from "@/lib/tempo-anam-config";
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -76,7 +79,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { data: simulation, error: simulationError } = await supabase
       .from("simulations")
-      .select("anam_avatar_ids")
+      .select("anam_avatar_ids, anam_voice_ids")
       .eq("id", attempt.simulation_id)
       .maybeSingle();
 
@@ -84,15 +87,24 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "Simulation not found." }, { status: 404 });
     }
 
-    const avatarId = getAnamAvatarId(
-      stage,
-      normalizeAnamAvatarIds(simulation.anam_avatar_ids)
-    );
+    const avatarIds = normalizeAnamIdMap(simulation.anam_avatar_ids);
+    const voiceIds = normalizeAnamIdMap(simulation.anam_voice_ids);
 
+    const avatarId = getAnamAvatarId(stage, avatarIds);
     if (!avatarId) {
       return NextResponse.json(
         {
-          error: `No Anam avatar ID configured for stage '${stage}'. Set simulations.anam_avatar_ids or ANAM_AVATAR_ID_${stage === "discovery" ? "DANA" : "KIM"}.`,
+          error: `No Anam avatar ID configured for stage '${stage}'. Set simulations.anam_avatar_ids['${stage}'] for this simulation.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const voiceId = getAnamVoiceId(stage, voiceIds);
+    if (!voiceId) {
+      return NextResponse.json(
+        {
+          error: `No Anam voice ID configured for stage '${stage}'. Set simulations.anam_voice_ids['${stage}'] for this simulation.`,
         },
         { status: 400 }
       );
@@ -107,7 +119,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       body: JSON.stringify({
         personaConfig: {
           avatarId,
-          enableAudioPassthrough: true,
+          voiceId,
+          llmId: ANAM_CUSTOM_CLIENT_LLM_ID,
         },
       }),
     });

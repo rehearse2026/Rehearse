@@ -1,14 +1,11 @@
 /**
  * tempo-anam-config.ts
- * Per-stage Anam avatar ID resolution for Tempo Discovery and Objection Handling.
+ * Per-stage Anam avatar/voice ID resolution from simulations row only (no env fallback).
  * Used by the server-side anam-session route; client receives only session tokens.
  */
 
-/** Fallback avatar IDs from env when simulation.anam_avatar_ids has no entry. */
-export const TEMPO_ANAM_AVATAR_IDS: Record<string, string> = {
-  discovery: process.env.ANAM_AVATAR_ID_DANA ?? "",
-  objections: process.env.ANAM_AVATAR_ID_KIM ?? "",
-};
+/** Disables Anam's built-in LLM; client supplies GPT responses via talk stream. */
+export const ANAM_CUSTOM_CLIENT_LLM_ID = "CUSTOMER_CLIENT_V1" as const;
 
 const ANAM_STAGES = ["discovery", "objections"] as const;
 
@@ -22,11 +19,9 @@ export function isAnamSessionStage(stage: string): stage is AnamSessionStage {
 }
 
 /**
- * Normalizes a jsonb map from simulations.anam_avatar_ids into string values.
+ * Normalizes a jsonb map (anam_avatar_ids / anam_voice_ids) into string values.
  */
-export function normalizeAnamAvatarIds(
-  value: unknown
-): Record<string, string> | null {
+export function normalizeAnamIdMap(value: unknown): Record<string, string> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
@@ -46,20 +41,23 @@ export function normalizeAnamAvatarIds(
 }
 
 /**
- * Resolves the Anam avatar ID for a stage:
- * 1. simulation.anam_avatar_ids[stage] when non-empty
- * 2. TEMPO_ANAM_AVATAR_IDS[stage] env fallback
- * 3. '' when neither is configured (caller treats as error)
+ * Resolves the Anam avatar ID for a stage from simulations.anam_avatar_ids only.
+ * Returns '' when missing (caller treats as error).
  */
 export function getAnamAvatarId(
   stage: string,
   simulationAnamAvatarIds: Record<string, string> | null
 ): string {
-  const fromSimulation = simulationAnamAvatarIds?.[stage]?.trim();
-  if (fromSimulation) {
-    return fromSimulation;
-  }
+  return simulationAnamAvatarIds?.[stage]?.trim() ?? "";
+}
 
-  const fromEnv = TEMPO_ANAM_AVATAR_IDS[stage]?.trim();
-  return fromEnv ?? "";
+/**
+ * Resolves the Anam voice ID for a stage from simulations.anam_voice_ids only.
+ * Returns '' when missing (caller treats as error).
+ */
+export function getAnamVoiceId(
+  stage: string,
+  simulationAnamVoiceIds: Record<string, string> | null
+): string {
+  return simulationAnamVoiceIds?.[stage]?.trim() ?? "";
 }
