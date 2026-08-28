@@ -16,7 +16,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AnamEvent, createClient, type AnamClient, type Message } from "@anam-ai/js-sdk";
+import { AnamEvent, createClient, type AnamClient, type Message, type PersonaConfig } from "@anam-ai/js-sdk";
 import {
   CALL_PERSONA_VIDEO_CLASS,
   CALL_PERSONA_VIDEO_FRAME_CLASS,
@@ -82,6 +82,26 @@ function notifySessionReady(): void {
 }
 
 /**
+ * Renames the ephemeral persona in Anam to the live session UUID for dashboard lookup.
+ */
+function applyAnamSessionPersonaName(sessionId: string): void {
+  if (!sharedClient || !sessionId.trim()) {
+    return;
+  }
+
+  const config = sharedClient.getPersonaConfig();
+  if (!config) {
+    return;
+  }
+
+  try {
+    sharedClient.setPersonaConfig({ ...config, name: sessionId.trim() } as PersonaConfig);
+  } catch (error) {
+    console.warn("[Avatar] Could not set Anam persona name to session id:", error);
+  }
+}
+
+/**
  * Last error from startSession / beginStreaming (for callers to surface in UI).
  */
 export function getAvatarInitError(): string | null {
@@ -121,7 +141,8 @@ function registerClientListeners(client: AnamClient): void {
     voiceCallbacks.onConnectionClosed?.(reason, details);
   });
 
-  client.addListener(AnamEvent.SESSION_READY, () => {
+  client.addListener(AnamEvent.SESSION_READY, (sessionId: string) => {
+    applyAnamSessionPersonaName(sessionId);
     notifySessionReady();
   });
 

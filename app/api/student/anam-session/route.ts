@@ -125,6 +125,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    // Shown in Anam dashboard (persona name + client label). Updated client-side to
+    // Anam session UUID on SESSION_READY when supported.
+    const sessionLabel = `${stage}:${attemptId}`;
+
     const anamResponse = await fetch(ANAM_SESSION_TOKEN_URL, {
       method: "POST",
       headers: {
@@ -132,7 +136,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
+        clientLabel: sessionLabel,
         personaConfig: {
+          name: sessionLabel,
           avatarId,
           voiceId,
           llmId: ANAM_CUSTOM_CLIENT_LLM_ID,
