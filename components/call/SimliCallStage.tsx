@@ -1,6 +1,6 @@
 /**
  * SimliCallStage.tsx
- * Orchestrates lobby → Simli connect → active call → score for Discovery and Objections.
+ * Orchestrates lobby → Anam connect → active call → score for Discovery and Objections.
  * Avatar mounts once after Join Call and is not remounted until the call ends.
  */
 
@@ -78,7 +78,7 @@ export function SimliCallStage({
   topBanner,
 }: SimliCallStageProps): React.ReactElement {
   const [phase, setPhase] = useState<CallPhase>("lobby");
-  const [mountSimli, setMountSimli] = useState(false);
+  const [mountAvatar, setMountAvatar] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
   const [connectError, setConnectError] = useState("");
   const [score, setScore] = useState<number | undefined>();
@@ -101,6 +101,8 @@ export function SimliCallStage({
     stageHint,
     openingGreeting,
     isMutedRef: videoCall.isMutedRef,
+    attemptId,
+    anamStage: scoreStage,
   });
 
   const voiceRef = useRef(voice);
@@ -119,13 +121,13 @@ export function SimliCallStage({
     void (async (): Promise<void> => {
       await resumePlaybackContext();
       await primeUserGestureRef.current();
-      setMountSimli(true);
+      setMountAvatar(true);
       setPhase("connecting");
     })();
   }, [videoCall.canJoin]);
 
   useEffect(() => {
-    if (phase !== "connecting" || !mountSimli || connectStartedRef.current) {
+    if (phase !== "connecting" || !mountAvatar || connectStartedRef.current) {
       return;
     }
 
@@ -137,7 +139,7 @@ export function SimliCallStage({
         setConnectError(
           `Could not connect to ${simulation.persona_name}. Reload and try again.`
         );
-        setMountSimli(false);
+        setMountAvatar(false);
         setPhase("lobby");
         connectStartedRef.current = false;
         return;
@@ -145,12 +147,12 @@ export function SimliCallStage({
 
       avatar.resumeAudioContext();
 
-      const simliReady = await avatar.startSession();
-      if (!simliReady) {
+      const avatarReady = await avatar.startSession();
+      if (!avatarReady) {
         setConnectError(
-          `Could not connect to ${simulation.persona_name} in time. Check Simli keys and try again.`
+          `Could not connect to ${simulation.persona_name} in time. Check Anam configuration and try again.`
         );
-        setMountSimli(false);
+        setMountAvatar(false);
         setPhase("lobby");
         connectStartedRef.current = false;
         return;
@@ -159,7 +161,7 @@ export function SimliCallStage({
       const audioStream = getAudioStreamRef.current();
       if (!audioStream || audioStream.getAudioTracks().length === 0) {
         setConnectError("Microphone stream unavailable. Reload and try again.");
-        setMountSimli(false);
+        setMountAvatar(false);
         setPhase("lobby");
         connectStartedRef.current = false;
         return;
@@ -172,14 +174,14 @@ export function SimliCallStage({
         setPhase("active");
       } catch {
         setConnectError("Could not start voice session. Reload and try again.");
-        setMountSimli(false);
+        setMountAvatar(false);
         setPhase("lobby");
         connectStartedRef.current = false;
       }
     };
 
     void run();
-  }, [phase, mountSimli, simulation.persona_name, videoCall.startTimer]);
+  }, [phase, mountAvatar, simulation.persona_name, videoCall.startTimer]);
 
   const runScoring = useCallback(async (): Promise<void> => {
     setPhase("scoring");
@@ -220,7 +222,7 @@ export function SimliCallStage({
       showToast("Something went wrong. Please try again.", "error");
       setScoreError(err instanceof Error ? err.message : "Scoring failed");
       setPhase("active");
-      setMountSimli(true);
+      setMountAvatar(true);
     }
   }, [
     scoreTranscriptExtra,
@@ -235,7 +237,7 @@ export function SimliCallStage({
   const handleConfirmEndCall = useCallback((): void => {
     setShowEndModal(false);
     voice.endCall();
-    setMountSimli(false);
+    setMountAvatar(false);
     videoCall.stopTimer();
     videoCall.stopAllTracks();
     void runScoring();
@@ -314,9 +316,9 @@ export function SimliCallStage({
         </p>
       )}
 
-      {mountSimli && (
+      {mountAvatar && (
         <div className="absolute inset-0 z-0" style={{ "--call-video-dock-h": `${CALL_VIDEO_BOTTOM_DOCK_PX}px` } as React.CSSProperties}>
-          <Avatar ref={voice.avatarRef} faceId={simulation.simli_face_id} />
+          <Avatar ref={voice.avatarRef} />
         </div>
       )}
 

@@ -1,32 +1,35 @@
 /**
  * useSimulationVoiceSession.ts
- * Simli voice stages: Deepgram + GPT + ElevenLabs through AvatarRef.
+ * Anam custom-LLM voice stages: Anam STT/TTS/avatar + GPT via /api/chat.
  * Does not acquire media — caller supplies the lobby MediaStream on join.
  */
 
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { base64ToArrayBuffer, pickMediaRecorderMimeType } from "@/lib/audio";
-import { playBase64Speech, resumePlaybackContext } from "@/lib/audio-playback";
-import { buildDefaultOpeningGreeting } from "@/lib/persona";
+import { MessageRole, type Message } from "@anam-ai/js-sdk";
 import {
+  DANA_REYES_SYSTEM_PROMPT,
+  DR_KIM_SYSTEM_PROMPT,
   SIMULATION_POST_SPEAK_COOLDOWN_MS,
-  SIMULATION_VOICE_DEBOUNCE_MS,
-  SIMULATION_VOICE_ENDPOINTING_MS,
-  SIMULATION_VOICE_RECORDER_TIMESLICE_MS,
-  SIMULATION_VOICE_UTTERANCE_END_MS,
 } from "@/lib/constants";
-import { createDeepgramConnection } from "@/lib/deepgram";
+import { buildDefaultOpeningGreeting } from "@/lib/persona";
 import { buildVoiceSystemPrompt } from "@/lib/persona-voice";
-import { createUtteranceBuffer } from "@/lib/voice-utterance-buffer";
-import type { AvatarRef, ChatMessage, TtsResponseBody } from "@/types";
+import {
+  setAvatarSessionConfig,
+  setAvatarVoiceCallbacks,
+  type AnamSessionStage,
+  type ExtendedAvatarRef,
+} from "@/components/Avatar";
+import type { AvatarRef, ChatMessage } from "@/types";
 
 export type SimulationVoiceConfig = {
   systemPrompt: string;
   openingGreeting?: string;
   stageHint?: string;
   isMutedRef?: React.MutableRefObject<boolean>;
+  attemptId?: string;
+  anamStage?: AnamSessionStage;
 };
 
 export type SimulationVoiceReturn = {
@@ -36,20 +39,53 @@ export type SimulationVoiceReturn = {
   userTranscripts: string;
   personaTranscripts: string;
   getFullTranscript: () => string;
-  /** Starts Deepgram using an audio-only MediaStream (not the PiP video stream). */
+  /** Starts Anam streaming using an audio-only MediaStream (not the PiP video stream). */
   startCall: (audioStream: MediaStream) => Promise<void>;
   stopListening: () => void;
   endCall: () => void;
-  /** Swap MediaRecorder to a new mic stream after unmute. */
+  /** Swap mic input after unmute. */
   replaceAudioStream: (audioStream: MediaStream) => void;
-  /** Stops sending mic audio to Deepgram without ending the call. */
+  /** Mutes Anam mic input without ending the call. */
   pauseMic: () => void;
-  /** Resumes Deepgram capture on a (usually fresh) mic stream. */
+  /** Resumes Anam mic input on a (usually fresh) mic stream. */
   resumeMic: (audioStream: MediaStream) => void;
 };
 
+function resolveAttemptId(configAttemptId?: string): string {
+  if (configAttemptId?.trim()) {
+    return configAttemptId.trim();
+  }
+  if (typeof window !== "undefined") {
+    const param = new URLSearchParams(window.location.search).get("attempt");
+    if (param?.trim()) {
+      return param.trim();
+    }
+  }
+  return "";
+}
+
+function resolveAnamStage(
+  systemPrompt: string,
+  configStage?: AnamSessionStage
+): AnamSessionStage | null {
+  if (configStage) {
+    return configStage;
+  }
+  if (systemPrompt === DANA_REYES_SYSTEM_PROMPT) {
+    return "discovery";
+  }
+  if (systemPrompt === DR_KIM_SYSTEM_PROMPT) {
+    return "objections";
+  }
+  return null;
+}
+
+function getExtendedAvatar(ref: AvatarRef | null): ExtendedAvatarRef | null {
+  return ref as ExtendedAvatarRef | null;
+}
+
 /**
- * Voice hook with Simli playback and turn-taking for discovery / objections / close.
+ * Voice hook with Anam playback and turn-taking for discovery / objections.
  */
 export function useSimulationVoiceSession(
   config: SimulationVoiceConfig
@@ -61,18 +97,17 @@ export function useSimulationVoiceSession(
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const avatarRef = useRef<AvatarRef>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const deepgramConnectionRef = useRef<ReturnType<typeof createDeepgramConnection> | null>(null);
-  const utteranceBufferRef = useRef<ReturnType<typeof createUtteranceBuffer> | null>(null);
   const isSpeakingRef = useRef(false);
   const isProcessingUserRef = useRef(false);
   const canListenAfterRef = useRef(0);
   const playbackEpochRef = useRef(0);
+  const llmEpochRef = useRef(0);
   const messagesRef = useRef<ChatMessage[]>([]);
   const transcriptLinesRef = useRef<string[]>([]);
   const isActiveRef = useRef(false);
   const configRef = useRef(config);
   const pendingUtteranceRef = useRef("");
+  const processedUserMessageIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     configRef.current = config;
@@ -86,13 +121,26 @@ export function useSimulationVoiceSession(
     isActiveRef.current = isActive;
   }, [isActive]);
 
+  // ── Anam session config (attemptId from prop or ?attempt= URL param) ───────
+
+  useEffect(() => {
+    const attemptId = resolveAttemptId(config.attemptId);
+    const stage = resolveAnamStage(config.systemPrompt, config.anamStage);
+    if (!attemptId || !stage) {
+      return;
+    }
+
+    setAvatarSessionConfig({ attemptId, stage });
+    const avatar = getExtendedAvatar(avatarRef.current);
+    avatar?.configureSession({ attemptId, stage });
+  }, [config.attemptId, config.anamStage, config.systemPrompt]);
+
   const appendTranscript = useCallback((speaker: string, text: string): void => {
     transcriptLinesRef.current.push(`${speaker}: ${text}`);
   }, []);
 
   const isMicMuted = (): boolean => Boolean(configRef.current.isMutedRef?.current);
 
-  /** Deepgram may ingest while GPT runs; block only during persona playback (echo). */
   const canIngestStudentSpeech = useCallback((): boolean => {
     return (
       !isMicMuted() &&
@@ -133,7 +181,7 @@ export function useSimulationVoiceSession(
     /* assigned after handleUserSentence is defined */
   });
 
-  const speakFromApi = useCallback(
+  const speakPersona = useCallback(
     async (text: string): Promise<void> => {
       setPersonaTranscripts(text);
       appendTranscript("Persona", text);
@@ -142,61 +190,22 @@ export function useSimulationVoiceSession(
       let playbackFailed = false;
 
       try {
-        const avatar = avatarRef.current;
+        const avatar = getExtendedAvatar(avatarRef.current);
         if (avatar && !avatar.isReady()) {
           const ready = await avatar.waitUntilReady();
           if (!ready || epoch !== playbackEpochRef.current) {
-            setStatusText("Avatar not ready — check Simli keys and reload.");
+            setStatusText("Avatar not ready — reload and try again.");
             playbackFailed = true;
             return;
           }
         }
 
-        const ttsRes = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-
-        if (epoch !== playbackEpochRef.current) return;
-
-        if (!ttsRes.ok) {
-          const errBody = (await ttsRes.json().catch(() => ({}))) as { error?: string };
-          throw new Error(errBody.error ?? `TTS failed (${ttsRes.status})`);
+        if (epoch !== playbackEpochRef.current) {
+          return;
         }
 
-        const data = (await ttsRes.json()) as TtsResponseBody;
-        if (!data.audioBase64 || epoch !== playbackEpochRef.current) {
-          throw new Error("TTS returned no audio — check ElevenLabs credits and ELEVENLABS_* env vars.");
-        }
-
-        const buffer = base64ToArrayBuffer(data.audioBase64);
-        let playbackMs = 2500;
-        try {
-          const decodeCtx = new AudioContext();
-          const decoded = await decodeCtx.decodeAudioData(buffer.slice(0));
-          playbackMs = Math.max(900, Math.ceil(decoded.duration * 1000));
-          void decodeCtx.close();
-        } catch {
-          /* fall back to default estimate */
-        }
-
-        // Hear TTS locally (reliable). Simli still gets PCM for lip-sync; its
-        // remote <audio> is muted in Avatar to avoid double playback.
-        await resumePlaybackContext();
-        const hearPromise = playBase64Speech(data.audioBase64);
-
-        if (avatarRef.current && epoch === playbackEpochRef.current) {
-          try {
-            await avatarRef.current.speakAudio({ audio: buffer });
-          } catch (simliErr) {
-            console.error("[voice] Simli lip-sync failed:", simliErr);
-          }
-          canListenAfterRef.current =
-            Date.now() + playbackMs + SIMULATION_POST_SPEAK_COOLDOWN_MS;
-        }
-
-        await hearPromise;
+        await avatar?.talk(text);
+        canListenAfterRef.current = Date.now() + SIMULATION_POST_SPEAK_COOLDOWN_MS;
       } catch (err) {
         console.error(err);
         setStatusText(err instanceof Error ? err.message : "Voice playback failed.");
@@ -232,6 +241,8 @@ export function useSimulationVoiceSession(
       setStatusText("Thinking...");
 
       const prior = messagesRef.current;
+      const llmEpoch = llmEpochRef.current;
+
       try {
         const systemPrompt = buildVoiceSystemPrompt(
           configRef.current.systemPrompt,
@@ -247,12 +258,21 @@ export function useSimulationVoiceSession(
           }),
         });
 
+        if (llmEpoch !== llmEpochRef.current) {
+          return;
+        }
+
         if (!chatRes.ok) {
           const errBody = (await chatRes.json().catch(() => ({}))) as { error?: string };
           throw new Error(errBody.error ?? `Chat failed (${chatRes.status})`);
         }
 
         const { reply } = (await chatRes.json()) as { reply: string };
+
+        if (llmEpoch !== llmEpochRef.current) {
+          return;
+        }
+
         const next: ChatMessage[] = [
           ...prior,
           { role: "user", content: trimmed },
@@ -260,7 +280,7 @@ export function useSimulationVoiceSession(
         ];
         setMessages(next);
         messagesRef.current = next;
-        await speakFromApi(reply);
+        await speakPersona(reply);
       } catch (err) {
         console.error(err);
         setStatusText(err instanceof Error ? err.message : "Could not get reply.");
@@ -269,18 +289,78 @@ export function useSimulationVoiceSession(
         scheduleFlushPending();
       }
     },
-    [speakFromApi, appendTranscript, scheduleFlushPending, canProcessStudentSpeech]
+    [speakPersona, appendTranscript, scheduleFlushPending, canProcessStudentSpeech]
   );
 
   handleUserSentenceRef.current = handleUserSentence;
 
+  const handleMessageHistoryUpdated = useCallback(
+    (history: Message[]): void => {
+      if (!isActiveRef.current || history.length === 0) {
+        return;
+      }
+
+      const last = history[history.length - 1];
+      if (last.role !== MessageRole.USER) {
+        return;
+      }
+
+      if (processedUserMessageIdsRef.current.has(last.id)) {
+        return;
+      }
+      processedUserMessageIdsRef.current.add(last.id);
+
+      const trimmed = last.content.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      setUserTranscripts(trimmed);
+
+      if (!canProcessStudentSpeech()) {
+        queuePendingUtterance(trimmed);
+        return;
+      }
+
+      void handleUserSentence(trimmed);
+    },
+    [handleUserSentence, canProcessStudentSpeech]
+  );
+
+  const handleTalkStreamInterrupted = useCallback((): void => {
+    playbackEpochRef.current += 1;
+    llmEpochRef.current += 1;
+    isSpeakingRef.current = false;
+    isProcessingUserRef.current = false;
+    getExtendedAvatar(avatarRef.current)?.stopSpeaking();
+    if (isActiveRef.current) {
+      setStatusText("Your turn — speak when ready.");
+    }
+    scheduleFlushPending();
+  }, [scheduleFlushPending]);
+
+  const handleConnectionClosed = useCallback((reason: string, details?: string): void => {
+    console.warn("[voice] Anam connection closed:", reason, details ?? "");
+    setStatusText("Call connection ended.");
+    setIsActive(false);
+  }, []);
+
+  // ── Anam event wiring ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    setAvatarVoiceCallbacks({
+      onMessageHistoryUpdated: handleMessageHistoryUpdated,
+      onTalkStreamInterrupted: handleTalkStreamInterrupted,
+      onConnectionClosed: handleConnectionClosed,
+    });
+
+    return () => {
+      setAvatarVoiceCallbacks({});
+    };
+  }, [handleMessageHistoryUpdated, handleTalkStreamInterrupted, handleConnectionClosed]);
+
   const stopListening = useCallback((): void => {
-    utteranceBufferRef.current?.cancel();
     pendingUtteranceRef.current = "";
-    mediaRecorderRef.current?.stop();
-    mediaRecorderRef.current = null;
-    deepgramConnectionRef.current?.close();
-    deepgramConnectionRef.current = null;
     setIsActive(false);
   }, []);
 
@@ -291,81 +371,38 @@ export function useSimulationVoiceSession(
         throw new Error("No microphone audio track available.");
       }
 
+      const attemptId = resolveAttemptId(configRef.current.attemptId);
+      const stage = resolveAnamStage(
+        configRef.current.systemPrompt,
+        configRef.current.anamStage
+      );
+      if (!attemptId || !stage) {
+        throw new Error("Missing attempt ID or stage for Anam session.");
+      }
+
       try {
-        avatarRef.current?.resumeAudioContext();
+        const avatar = getExtendedAvatar(avatarRef.current);
+        avatar?.configureSession({ attemptId, stage });
+        setAvatarSessionConfig({ attemptId, stage });
+
+        avatar?.resumeAudioContext();
         setIsActive(true);
         setMessages([]);
         messagesRef.current = [];
         transcriptLinesRef.current = [];
+        processedUserMessageIdsRef.current.clear();
         setUserTranscripts("");
         setPersonaTranscripts("");
         pendingUtteranceRef.current = "";
         canListenAfterRef.current = Date.now() + SIMULATION_POST_SPEAK_COOLDOWN_MS;
 
-        utteranceBufferRef.current = createUtteranceBuffer(
-          {
-            onLivePreview: (preview) => setUserTranscripts(preview),
-            onCommit: (full) => {
-              const trimmed = full.trim();
-              if (!trimmed) {
-                return;
-              }
-              if (!canProcessStudentSpeech()) {
-                queuePendingUtterance(trimmed);
-                return;
-              }
-              void handleUserSentence(trimmed);
-            },
-          },
-          SIMULATION_VOICE_DEBOUNCE_MS
-        );
-
-        const connection = createDeepgramConnection({
-          endpointing: SIMULATION_VOICE_ENDPOINTING_MS,
-          utterance_end_ms: SIMULATION_VOICE_UTTERANCE_END_MS,
-        });
-        deepgramConnectionRef.current = connection;
-
-        const mimeType = pickMediaRecorderMimeType();
-        const mediaRecorder = mimeType
-          ? new MediaRecorder(audioStream, { mimeType })
-          : new MediaRecorder(audioStream);
-
-        mediaRecorder.ondataavailable = (event: BlobEvent): void => {
-          if (configRef.current.isMutedRef?.current) return;
-          if (event.data.size > 0) connection.send(event.data);
-        };
-        mediaRecorderRef.current = mediaRecorder;
+        await avatar?.beginStreaming(audioStream);
 
         const greeting =
           configRef.current.openingGreeting ?? buildDefaultOpeningGreeting();
 
-        connection.onTranscript((sentence: string, meta): void => {
-          if (!canIngestStudentSpeech()) {
-            return;
-          }
-
-          if (!meta.isFinal && !meta.isSpeechFinal) {
-            setUserTranscripts(sentence);
-            return;
-          }
-
-          if (meta.isFinal || meta.isSpeechFinal) {
-            utteranceBufferRef.current?.pushFragment(sentence, meta.isSpeechFinal);
-          }
-        });
-
-        connection.onError(() => {
-          setStatusText("Speech service error — check Deepgram API key.");
-        });
-
-        connection.onOpen(() => {
-          if (mediaRecorder.state === "inactive") {
-            mediaRecorder.start(SIMULATION_VOICE_RECORDER_TIMESLICE_MS);
-          }
-          setStatusText("Live — wait for persona to finish, then speak.");
-          void speakFromApi(greeting);
-        });
+        setStatusText("Live — wait for persona to finish, then speak.");
+        await speakPersona(greeting);
       } catch (err) {
         console.error(err);
         setStatusText(
@@ -375,61 +412,31 @@ export function useSimulationVoiceSession(
         throw err;
       }
     },
-    [handleUserSentence, speakFromApi, canIngestStudentSpeech, canProcessStudentSpeech]
+    [speakPersona]
   );
 
   const endCall = useCallback((): void => {
     playbackEpochRef.current += 1;
+    llmEpochRef.current += 1;
     isSpeakingRef.current = false;
     isProcessingUserRef.current = false;
-    avatarRef.current?.stopSpeaking();
+    getExtendedAvatar(avatarRef.current)?.stopSpeaking();
     stopListening();
+    void getExtendedAvatar(avatarRef.current)?.endSession();
   }, [stopListening]);
 
   const replaceAudioStream = useCallback((audioStream: MediaStream): void => {
     if (audioStream.getAudioTracks().length === 0) {
       return;
     }
-
-    const connection = deepgramConnectionRef.current;
-    const prev = mediaRecorderRef.current;
-    if (prev && prev.state !== "inactive") {
-      prev.stop();
-    }
-
-    const mimeType = pickMediaRecorderMimeType();
-    const mediaRecorder = mimeType
-      ? new MediaRecorder(audioStream, { mimeType })
-      : new MediaRecorder(audioStream);
-
-    mediaRecorder.ondataavailable = (event: BlobEvent): void => {
-      if (configRef.current.isMutedRef?.current) {
-        return;
-      }
-      if (event.data.size > 0) {
-        connection?.send(event.data);
-      }
-    };
-    mediaRecorderRef.current = mediaRecorder;
-
-    if (connection && mediaRecorder.state === "inactive") {
-      mediaRecorder.start(SIMULATION_VOICE_RECORDER_TIMESLICE_MS);
-    }
+    void getExtendedAvatar(avatarRef.current)?.updateInputStream(audioStream);
   }, []);
 
   const pauseMic = useCallback((): void => {
     if (configRef.current.isMutedRef) {
       configRef.current.isMutedRef.current = true;
     }
-    utteranceBufferRef.current?.cancel();
-
-    const recorder = mediaRecorderRef.current;
-    if (!recorder) {
-      return;
-    }
-    if (recorder.state === "recording" || recorder.state === "paused") {
-      recorder.stop();
-    }
+    getExtendedAvatar(avatarRef.current)?.setInputMuted(true);
   }, []);
 
   const resumeMic = useCallback(
@@ -437,6 +444,7 @@ export function useSimulationVoiceSession(
       if (configRef.current.isMutedRef) {
         configRef.current.isMutedRef.current = false;
       }
+      getExtendedAvatar(avatarRef.current)?.setInputMuted(false);
       replaceAudioStream(audioStream);
     },
     [replaceAudioStream]
