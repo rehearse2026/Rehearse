@@ -6,7 +6,8 @@
 
 /** MP4 served from the onboarding-videos bucket — slide deck (left) + presenter (right) composite. */
 export const TEMPO_ONBOARDING_VIDEO_URL =
-  "https://visuvrjmcoanndndimfw.supabase.co/storage/v1/object/public/onboarding-videos/tempo-welcome.mp4?v=split-20260829";
+  "https://visuvrjmcoanndndimfw.supabase.co/storage/v1/object/public/onboarding-videos/tempo-welcome-v2.mp4";
 
 /** WebVTT captions for the onboarding video, when generated. */
-export const TEMPO_ONBOARDING_CAPTIONS_URL: string | null = null;
+export const TEMPO_ONBOARDING_CAPTIONS_URL: string | null =
+  "https://visuvrjmcoanndndimfw.supabase.co/storage/v1/object/public/onboarding-videos/tempo-welcome-v2.vtt";
