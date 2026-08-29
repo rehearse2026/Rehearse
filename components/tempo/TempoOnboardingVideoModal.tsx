@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { TEMPO_ONBOARDING_VIDEO_URL, TEMPO_ONBOARDING_CAPTIONS_URL } from "@/lib/tempo-onboarding-video";
+import { parseVtt, type VttCue } from "@/lib/parse-vtt";
 
 const CENTER_CONTROL_HIDE_MS = 900;
 
@@ -45,8 +46,39 @@ function OnboardingVideoPlayer({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
+  const [captionCues, setCaptionCues] = useState<VttCue[]>([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    if (!TEMPO_ONBOARDING_CAPTIONS_URL) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void fetch(TEMPO_ONBOARDING_CAPTIONS_URL)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Captions fetch failed (${response.status})`);
+        }
+        return response.text();
+      })
+      .then((vttContent) => {
+        if (!cancelled) {
+          setCaptionCues(parseVtt(vttContent));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCaptionCues([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const clearHideTimer = useCallback((): void => {
     if (hideOverlayTimerRef.current !== null) {
@@ -119,16 +151,6 @@ function OnboardingVideoPlayer({
     if (!video) {
       return;
     }
-    for (let i = 0; i < video.textTracks.length; i += 1) {
-      video.textTracks[i].mode = captionsOn ? "showing" : "hidden";
-    }
-  }, [captionsOn]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) {
-      return;
-    }
 
     const onPlay = (): void => {
       setIsPlaying(true);
@@ -187,6 +209,11 @@ function OnboardingVideoPlayer({
 
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
   const displayVolume = isMuted ? 0 : volume;
+  const activeCaption =
+    captionsOn && captionCues.length > 0
+      ? captionCues.find((cue) => currentTime >= cue.start && currentTime < cue.end)?.text ?? null
+      : null;
+  const captionsAvailable = captionCues.length > 0;
 
   return (
     <div
@@ -202,27 +229,27 @@ function OnboardingVideoPlayer({
       <video
         ref={videoRef}
         src={TEMPO_ONBOARDING_VIDEO_URL}
+        crossOrigin="anonymous"
         playsInline
         preload="metadata"
         disablePictureInPicture
         controlsList="nodownload noplaybackrate noremoteplayback"
-        className="h-full w-full object-contain cursor-pointer bg-black"
+        className="h-full w-full object-contain cursor-pointer bg-white"
         onClick={() => {
           void togglePlay();
         }}
-      >
-        {TEMPO_ONBOARDING_CAPTIONS_URL ? (
-          <track
-            kind="captions"
-            src={TEMPO_ONBOARDING_CAPTIONS_URL}
-            srcLang="en"
-            label="English"
-            default={captionsOn}
-          />
-        ) : (
-          <track kind="captions" />
-        )}
-      </video>
+      />
+
+      {activeCaption ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-14 z-[15] flex justify-center px-4"
+          aria-live="polite"
+        >
+          <p className="max-w-[90%] rounded-md bg-black/80 px-3 py-1.5 text-center text-sm font-medium leading-snug text-white">
+            {activeCaption}
+          </p>
+        </div>
+      ) : null}
 
       <button
         type="button"
@@ -314,9 +341,10 @@ function OnboardingVideoPlayer({
           <button
             type="button"
             onClick={toggleCaptions}
+            disabled={!captionsAvailable}
             aria-label={captionsOn ? "Hide captions" : "Show captions"}
             aria-pressed={captionsOn}
-            className={`shrink-0 p-1 transition-colors ${
+            className={`shrink-0 p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               captionsOn ? "text-white" : "text-white/60 hover:text-white/90"
             }`}
           >
@@ -409,7 +437,7 @@ export function TempoOnboardingVideoModal({
           </button>
         </div>
 
-        <div className="aspect-video bg-black">
+        <div className="aspect-video bg-white">
           <OnboardingVideoPlayer autoPlay />
         </div>
 
@@ -433,11 +461,11 @@ export function TempoOnboardingVideoModal({
  */
 export function TempoOnboardingVideoInline(): React.ReactElement {
   return (
-    <div className="w-full">
-      <div className="text-white/50 text-[12px] font-bold tracking-widest uppercase mb-3">
+    <div className="w-full rounded-xl border border-outline-variant bg-white p-4 sm:p-6 shadow-2xl">
+      <div className="text-on-surface-variant text-[12px] font-bold tracking-widest uppercase mb-3">
         Onboarding Briefing
       </div>
-      <div className="rounded-xl border border-white/10 overflow-hidden bg-black shadow-2xl aspect-video">
+      <div className="rounded-lg border border-outline-variant overflow-hidden bg-white aspect-video">
         <OnboardingVideoPlayer />
       </div>
     </div>
