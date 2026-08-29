@@ -6,7 +6,8 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "composite:onboarding-pip": "npx tsx scripts/composite-onboarding-pip.ts"
   },
   "dependencies": {
     "@anam-ai/js-sdk": "^4.26.0",
