@@ -461,11 +461,11 @@ export function TempoOnboardingVideoModal({
  */
 export function TempoOnboardingVideoInline(): React.ReactElement {
   return (
-    <div className="w-full rounded-xl border border-outline-variant bg-white p-4 sm:p-6 shadow-2xl">
-      <div className="text-on-surface-variant text-[12px] font-bold tracking-widest uppercase mb-3">
+    <div className="w-full">
+      <div className="text-on-surface-variant text-[12px] font-bold tracking-widest uppercase mb-4">
         Onboarding Briefing
       </div>
-      <div className="rounded-lg border border-outline-variant overflow-hidden bg-white aspect-video">
+      <div className="aspect-video w-full overflow-hidden rounded-xl bg-white">
         <OnboardingVideoPlayer />
       </div>
     </div>

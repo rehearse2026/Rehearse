@@ -116,7 +116,11 @@ export function TempoEntryFreshStart({
             </div>
           </div>
         </div>
-        <div className="max-w-[1100px] mx-auto px-6 lg:px-8 mt-12">
+      </section>
+
+      {/* ONBOARDING VIDEO */}
+      <section className="bg-white py-12 lg:py-16">
+        <div className="max-w-[1100px] mx-auto px-6 lg:px-8">
           <TempoOnboardingVideoInline />
         </div>
       </section>
