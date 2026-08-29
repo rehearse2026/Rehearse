@@ -18,7 +18,7 @@ type OnboardingVideoPlayerProps = {
 };
 
 /**
- * Custom onboarding player — center play/pause overlay (auto-hides while playing), no native controls.
+ * Custom onboarding player — center play/pause overlay plus volume and captions controls.
  */
 function OnboardingVideoPlayer({
   autoPlay = false,
@@ -27,7 +27,10 @@ function OnboardingVideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideOverlayTimerRef = useRef<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showCenterControl, setShowCenterControl] = useState(true);
+  const [showChrome, setShowChrome] = useState(true);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [captionsOn, setCaptionsOn] = useState(false);
 
   const clearHideTimer = useCallback((): void => {
     if (hideOverlayTimerRef.current !== null) {
@@ -36,11 +39,16 @@ function OnboardingVideoPlayer({
     }
   }, []);
 
-  const scheduleHideCenterControl = useCallback((): void => {
+  const scheduleHideChrome = useCallback((): void => {
     clearHideTimer();
     hideOverlayTimerRef.current = window.setTimeout(() => {
-      setShowCenterControl(false);
+      setShowChrome(false);
     }, CENTER_CONTROL_HIDE_MS);
+  }, [clearHideTimer]);
+
+  const revealChrome = useCallback((): void => {
+    clearHideTimer();
+    setShowChrome(true);
   }, [clearHideTimer]);
 
   const togglePlay = useCallback(async (): Promise<void> => {
@@ -55,6 +63,41 @@ function OnboardingVideoPlayer({
     }
   }, []);
 
+  const toggleMute = useCallback((): void => {
+    setIsMuted((muted) => !muted);
+  }, []);
+
+  const handleVolumeChange = useCallback((nextVolume: number): void => {
+    const clamped = Math.min(1, Math.max(0, nextVolume));
+    setVolume(clamped);
+    if (clamped > 0) {
+      setIsMuted(false);
+    }
+  }, []);
+
+  const toggleCaptions = useCallback((): void => {
+    setCaptionsOn((on) => !on);
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+    video.volume = volume;
+    video.muted = isMuted;
+  }, [volume, isMuted]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+    for (let i = 0; i < video.textTracks.length; i += 1) {
+      video.textTracks[i].mode = captionsOn ? "showing" : "hidden";
+    }
+  }, [captionsOn]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) {
@@ -63,17 +106,17 @@ function OnboardingVideoPlayer({
 
     const onPlay = (): void => {
       setIsPlaying(true);
-      scheduleHideCenterControl();
+      scheduleHideChrome();
     };
     const onPause = (): void => {
       setIsPlaying(false);
       clearHideTimer();
-      setShowCenterControl(true);
+      setShowChrome(true);
     };
     const onEnded = (): void => {
       setIsPlaying(false);
       clearHideTimer();
-      setShowCenterControl(true);
+      setShowChrome(true);
     };
 
     video.addEventListener("play", onPlay);
@@ -86,30 +129,29 @@ function OnboardingVideoPlayer({
       video.removeEventListener("ended", onEnded);
       clearHideTimer();
     };
-  }, [clearHideTimer, scheduleHideCenterControl]);
+  }, [clearHideTimer, scheduleHideChrome]);
 
   useEffect(() => {
     if (!autoPlay || !videoRef.current) {
       return;
     }
     void videoRef.current.play().catch(() => {
-      setShowCenterControl(true);
+      setShowChrome(true);
     });
   }, [autoPlay]);
 
+  const displayVolume = isMuted ? 0 : volume;
+
   return (
     <div
-      className={`relative h-full w-full ${className ?? ""}`}
-      onMouseEnter={() => {
-        if (isPlaying) {
-          setShowCenterControl(true);
-        }
-      }}
+      className={`relative h-full w-full group ${className ?? ""}`}
+      onMouseEnter={revealChrome}
       onMouseLeave={() => {
         if (isPlaying) {
-          scheduleHideCenterControl();
+          scheduleHideChrome();
         }
       }}
+      onMouseMove={revealChrome}
     >
       <video
         ref={videoRef}
@@ -123,7 +165,7 @@ function OnboardingVideoPlayer({
           void togglePlay();
         }}
       >
-        <track kind="captions" />
+        <track kind="captions" srcLang="en" label="English" default={false} />
       </video>
 
       <button
@@ -133,8 +175,8 @@ function OnboardingVideoPlayer({
           event.stopPropagation();
           void togglePlay();
         }}
-        className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
-          showCenterControl ? "opacity-100" : "opacity-0 pointer-events-none"
+        className={`absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-300 ${
+          showChrome ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
         <span className="flex h-16 w-16 items-center justify-center rounded-full border border-white/25 bg-black/55 backdrop-blur-sm shadow-lg">
@@ -144,6 +186,50 @@ function OnboardingVideoPlayer({
           />
         </span>
       </button>
+
+      <div
+        className={`absolute inset-x-0 bottom-0 z-20 px-4 pb-3 pt-10 bg-gradient-to-t from-black/85 via-black/50 to-transparent transition-opacity duration-300 ${
+          showChrome ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleMute}
+            aria-label={isMuted || volume === 0 ? "Unmute video" : "Mute video"}
+            className="text-white/90 hover:text-white transition-colors"
+          >
+            <MaterialIcon
+              name={isMuted || volume === 0 ? "volume_off" : volume < 0.5 ? "volume_down" : "volume_up"}
+              className="text-[22px]"
+            />
+          </button>
+
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={displayVolume}
+            onChange={(event) => handleVolumeChange(Number(event.target.value))}
+            aria-label="Video volume"
+            className="h-1 w-24 sm:w-32 cursor-pointer accent-white"
+          />
+
+          <button
+            type="button"
+            onClick={toggleCaptions}
+            aria-label={captionsOn ? "Hide captions" : "Show captions"}
+            aria-pressed={captionsOn}
+            className={`ml-auto transition-colors ${
+              captionsOn ? "text-white" : "text-white/60 hover:text-white/90"
+            }`}
+          >
+            <MaterialIcon name="closed_caption" className="text-[22px]" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
