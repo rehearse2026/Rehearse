@@ -12,13 +12,26 @@ import { TEMPO_ONBOARDING_VIDEO_URL } from "@/lib/tempo-onboarding-video";
 
 const CENTER_CONTROL_HIDE_MS = 900;
 
+/**
+ * Formats seconds as m:ss for the video timeline display.
+ */
+function formatVideoTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "0:00";
+  }
+  const totalSeconds = Math.floor(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
+}
+
 type OnboardingVideoPlayerProps = {
   autoPlay?: boolean;
   className?: string;
 };
 
 /**
- * Custom onboarding player — center play/pause overlay plus volume and captions controls.
+ * Custom onboarding player — center play/pause overlay plus seek, volume, and captions controls.
  */
 function OnboardingVideoPlayer({
   autoPlay = false,
@@ -26,11 +39,14 @@ function OnboardingVideoPlayer({
 }: OnboardingVideoPlayerProps): React.ReactElement {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideOverlayTimerRef = useRef<number | null>(null);
+  const isSeekingRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showChrome, setShowChrome] = useState(true);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   const clearHideTimer = useCallback((): void => {
     if (hideOverlayTimerRef.current !== null) {
@@ -67,13 +83,15 @@ function OnboardingVideoPlayer({
     setIsMuted((muted) => !muted);
   }, []);
 
-  const handleVolumeChange = useCallback((nextVolume: number): void => {
-    const clamped = Math.min(1, Math.max(0, nextVolume));
-    setVolume(clamped);
-    if (clamped > 0) {
-      setIsMuted(false);
+  const handleSeek = useCallback((nextTime: number): void => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(nextTime)) {
+      return;
     }
-  }, []);
+    const clamped = Math.min(Math.max(0, nextTime), duration || video.duration || 0);
+    video.currentTime = clamped;
+    setCurrentTime(clamped);
+  }, [duration]);
 
   const toggleCaptions = useCallback((): void => {
     setCaptionsOn((on) => !on);
@@ -118,15 +136,34 @@ function OnboardingVideoPlayer({
       clearHideTimer();
       setShowChrome(true);
     };
+    const onTimeUpdate = (): void => {
+      if (!isSeekingRef.current) {
+        setCurrentTime(video.currentTime);
+      }
+    };
+    const onLoadedMetadata = (): void => {
+      setDuration(video.duration);
+    };
+    const onDurationChange = (): void => {
+      if (Number.isFinite(video.duration)) {
+        setDuration(video.duration);
+      }
+    };
 
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
     video.addEventListener("ended", onEnded);
+    video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("loadedmetadata", onLoadedMetadata);
+    video.addEventListener("durationchange", onDurationChange);
 
     return () => {
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("loadedmetadata", onLoadedMetadata);
+      video.removeEventListener("durationchange", onDurationChange);
       clearHideTimer();
     };
   }, [clearHideTimer, scheduleHideChrome]);
@@ -140,7 +177,7 @@ function OnboardingVideoPlayer({
     });
   }, [autoPlay]);
 
-  const displayVolume = isMuted ? 0 : volume;
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
 
   return (
     <div
@@ -193,6 +230,35 @@ function OnboardingVideoPlayer({
         }`}
         onClick={(event) => event.stopPropagation()}
       >
+        <div className="mb-3 flex items-center gap-3">
+          <span className="font-code-md text-[11px] text-white/70 tabular-nums w-10 text-right">
+            {formatVideoTime(currentTime)}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={safeDuration || 1}
+            step={0.1}
+            value={Math.min(currentTime, safeDuration || currentTime)}
+            onPointerDown={() => {
+              isSeekingRef.current = true;
+              revealChrome();
+            }}
+            onPointerUp={() => {
+              isSeekingRef.current = false;
+            }}
+            onPointerLeave={() => {
+              isSeekingRef.current = false;
+            }}
+            onChange={(event) => handleSeek(Number(event.target.value))}
+            aria-label="Seek video"
+            className="h-1 flex-1 cursor-pointer accent-white"
+          />
+          <span className="font-code-md text-[11px] text-white/70 tabular-nums w-10">
+            {formatVideoTime(safeDuration)}
+          </span>
+        </div>
+
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -205,17 +271,6 @@ function OnboardingVideoPlayer({
               className="text-[22px]"
             />
           </button>
-
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={displayVolume}
-            onChange={(event) => handleVolumeChange(Number(event.target.value))}
-            aria-label="Video volume"
-            className="h-1 w-24 sm:w-32 cursor-pointer accent-white"
-          />
 
           <button
             type="button"
