@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
-import { TEMPO_ONBOARDING_VIDEO_URL } from "@/lib/tempo-onboarding-video";
+import { TEMPO_ONBOARDING_VIDEO_URL, TEMPO_ONBOARDING_CAPTIONS_URL } from "@/lib/tempo-onboarding-video";
 
 const CENTER_CONTROL_HIDE_MS = 900;
 
@@ -211,7 +211,17 @@ function OnboardingVideoPlayer({
           void togglePlay();
         }}
       >
-        <track kind="captions" srcLang="en" label="English" default={false} />
+        {TEMPO_ONBOARDING_CAPTIONS_URL ? (
+          <track
+            kind="captions"
+            src={TEMPO_ONBOARDING_CAPTIONS_URL}
+            srcLang="en"
+            label="English"
+            default={captionsOn}
+          />
+        ) : (
+          <track kind="captions" />
+        )}
       </video>
 
       <button

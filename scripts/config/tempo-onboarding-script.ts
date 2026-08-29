@@ -1,19 +1,44 @@
 /**
  * tempo-onboarding-script.ts
- * Approved onboarding narration for the Tempo simulation welcome video.
+ * ~90-second onboarding narration for the Tempo simulation welcome video (Avatar III + slide deck).
  * Consumed by scripts/generate-heygen-video.ts — do not alter without re-running the generator.
  */
 
-export const TEMPO_ONBOARDING_SCRIPT = `Welcome to the team.
+export type OnboardingScriptSegment = {
+  slideId: string;
+  script: string;
+};
 
-You've just joined Tempo as an Account Executive. Tempo makes scheduling software for appointment-based businesses — the kind of tool that helps a growing company stop losing money to no-shows, free up their front desk, and actually capture the business they're missing after hours.
+/** One segment per slide — avatar speaks over the matching deck background. */
+export const TEMPO_ONBOARDING_SEGMENTS: OnboardingScriptSegment[] = [
+  {
+    slideId: "welcome",
+    script:
+      "Welcome to Tempo. You've joined as an Account Executive. In this simulation, you'll run one real deal from first research to signed contract — the same scope of work you'd face in your first month on the job.",
+  },
+  {
+    slideId: "product",
+    script:
+      "Tempo is scheduling automation for appointment-based businesses — dental practices, clinics, salons, and similar teams. They lose revenue to no-shows, manual front-desk work, and demand they miss after hours. Your product fixes those problems.",
+  },
+  {
+    slideId: "assignment",
+    script:
+      "Your territory includes dozens of candidate accounts. Your job is to qualify the market, select the account with the strongest fit, and identify the decision maker who actually owns this purchase.",
+  },
+  {
+    slideId: "stages",
+    script:
+      "You'll advance through five stages: prospecting, a live discovery call, a written presentation, objection handling, and negotiation to close. Each stage tests whether you can find signal, build trust, and move the deal forward.",
+  },
+  {
+    slideId: "ready",
+    script:
+      "Nothing here is handed to you. Some paths will be dead ends — that's intentional. Rewatch this briefing anytime from your dashboard. When you're ready, start Stage One and go find your first customer.",
+  },
+];
 
-Here's your assignment: you're going to work one real deal, start to finish. Not a script. Not a role-play with the answer handed to you. A real sales cycle, the way it actually happens.
-
-You'll start by figuring out who you're even selling to — building a clear picture of what a great customer for Tempo actually looks like. Then you'll dig through real account information — the kind of research a rep does before ever picking up the phone — and narrow a big list down to the handful of accounts actually worth your time.
-
-Once you've found the right one, you'll build the tools to reach them, and write the message that gets a response. From there, it's a real conversation, a real pitch, real objections, and a real negotiation — all the way to close.
-
-Nobody's going to hand you the answer. Some of what you find along the way will look promising and turn out to be a dead end. That's not a bug — that's the job. Good reps know how to tell the difference between a lead that looks good and a lead that actually is good.
-
-You can rewatch this anytime from your dashboard. When you're ready — let's go find your first customer.`;
+/** Full narration concatenated — useful for logging and duration estimates. */
+export const TEMPO_ONBOARDING_SCRIPT = TEMPO_ONBOARDING_SEGMENTS.map((segment) => segment.script).join(
+  " "
+);
