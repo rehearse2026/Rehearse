@@ -121,13 +121,13 @@ function RoadmapNode({
 
   if (status === "completed") {
     return (
-      <div className="flex flex-col items-center gap-4 bg-surface px-4">
+      <div className="flex flex-col items-center gap-4 bg-primary-container px-4">
         <div className="w-12 h-12 rounded-full bg-tertiary-container flex items-center justify-center text-on-tertiary-fixed shadow-sm border-2 border-tertiary-container">
           <MaterialIcon name="check" filled />
         </div>
         <div className="text-center">
-          <p className="font-code-md text-tertiary-container font-bold text-[13px]">STAGE {stage.number}</p>
-          <p className="text-body-md font-bold text-on-surface">{stage.title}</p>
+          <p className="font-code-md text-tertiary-fixed font-bold text-[13px]">STAGE {stage.number}</p>
+          <p className="text-body-md font-bold text-white">{stage.title}</p>
         </div>
       </div>
     );
@@ -135,26 +135,26 @@ function RoadmapNode({
 
   if (status === "current") {
     return (
-      <div className="flex flex-col items-center gap-4 bg-surface px-4">
-        <div className="w-12 h-12 rounded-full bg-surface-container-lowest flex items-center justify-center text-secondary border-2 border-secondary animate-pulse shadow-sm">
+      <div className="flex flex-col items-center gap-4 bg-primary-container px-4">
+        <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-tertiary-fixed border-2 border-tertiary-fixed animate-pulse shadow-sm">
           <MaterialIcon name={icon} />
         </div>
         <div className="text-center">
-          <p className="font-code-md text-secondary font-bold text-[13px]">STAGE {stage.number}</p>
-          <p className="text-body-md font-bold text-on-surface">{stage.title}</p>
+          <p className="font-code-md text-tertiary-fixed font-bold text-[13px]">STAGE {stage.number}</p>
+          <p className="text-body-md font-bold text-white">{stage.title}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-4 bg-surface px-4 opacity-40">
-      <div className="w-12 h-12 rounded-full bg-surface-container-highest border border-outline-variant flex items-center justify-center text-outline">
+    <div className="flex flex-col items-center gap-4 bg-primary-container px-4 opacity-40">
+      <div className="w-12 h-12 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white/60">
         <MaterialIcon name={icon} />
       </div>
       <div className="text-center">
-        <p className="font-code-md text-outline font-bold text-[13px]">STAGE {stage.number}</p>
-        <p className="text-body-md font-bold text-on-surface">{stage.title}</p>
+        <p className="font-code-md text-white/50 font-bold text-[13px]">STAGE {stage.number}</p>
+        <p className="text-body-md font-bold text-white">{stage.title}</p>
       </div>
     </div>
   );
@@ -297,11 +297,11 @@ export function TempoEntryInProgress({
         </section>
 
         {/* Roadmap */}
-        <section className="bg-surface py-16 px-6 lg:px-8">
+        <section className="bg-primary-container py-16 px-6 lg:px-8">
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-headline-md text-on-surface mb-12 text-center">Simulation Roadmap</h2>
+            <h2 className="text-headline-md text-white mb-12 text-center">Simulation Roadmap</h2>
             <div className="relative">
-              <div className="absolute top-1/2 left-0 w-full h-0.5 bg-outline-variant -translate-y-1/2 z-0 hidden md:block" />
+              <div className="absolute top-1/2 left-0 w-full h-0.5 bg-white/20 -translate-y-1/2 z-0 hidden md:block" />
               <div className="relative z-10 flex flex-col md:flex-row justify-between gap-8 md:gap-4">
                 {TEMPO_STAGES.map((stage) => (
                   <RoadmapNode
@@ -318,14 +318,16 @@ export function TempoEntryInProgress({
         {/* CTA */}
         <section className="bg-primary-container py-20 px-6 lg:px-8">
           <div className="max-w-2xl mx-auto text-center flex flex-col items-center gap-4">
-            <Link
-              href={ctaHref}
-              className="bg-tertiary-container hover:opacity-90 text-on-tertiary-fixed font-bold text-lg px-12 py-4 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg flex items-center gap-3 group"
-            >
-              {ctaLabel}
-              <MaterialIcon name="arrow_forward" className="group-hover:translate-x-1 transition-transform" />
-            </Link>
-            <TempoOnboardingVideoTrigger />
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link
+                href={ctaHref}
+                className="bg-tertiary-container hover:opacity-90 text-on-tertiary-fixed font-bold text-lg px-12 py-4 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg flex items-center gap-3 group"
+              >
+                {ctaLabel}
+                <MaterialIcon name="arrow_forward" className="group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <TempoOnboardingVideoTrigger />
+            </div>
             {lastStageScore !== null && (
               <div className="mt-6 flex flex-col items-center gap-2">
                 <p className="text-white/40 text-[12px] font-code-md tracking-widest uppercase">
