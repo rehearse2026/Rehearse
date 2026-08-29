@@ -5,7 +5,7 @@
  * Only mounts after DiscoveryPreCallPrep is confirmed (gated in DiscoveryStage).
  * The microphone and camera are acquired ONLY when the student clicks their
  * respective buttons (so the macOS hardware indicators never light up on load).
- * The acquired microphone stream is handed to the call session on Join Call.
+ * The acquired microphone (and optional camera) streams are handed to the call session on Join Call.
  */
 
 "use client";
@@ -13,9 +13,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 
+export type DiscoveryJoinStreams = {
+  audioStream: MediaStream;
+  videoStream: MediaStream | null;
+};
+
 type DiscoveryLobbyProps = {
   connectError: string;
-  onJoin: (audioStream: MediaStream) => void;
+  onJoin: (streams: DiscoveryJoinStreams) => void;
 };
 
 /**
@@ -31,12 +36,12 @@ export function DiscoveryLobby({ connectError, onJoin }: DiscoveryLobbyProps): R
   const handedOffRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Stop any preview tracks that were not handed off to the call session.
+  // Stop preview tracks that were not handed off to the call session.
   useEffect(() => {
     return () => {
-      cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
       if (!handedOffRef.current) {
         micStreamRef.current?.getTracks().forEach((t) => t.stop());
+        cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
       }
     };
   }, []);
@@ -83,15 +88,15 @@ export function DiscoveryLobby({ connectError, onJoin }: DiscoveryLobbyProps): R
   }, [cameraOn]);
 
   const handleJoin = useCallback((): void => {
-    const stream = micStreamRef.current;
-    if (!stream) {
+    const audioStream = micStreamRef.current;
+    if (!audioStream) {
       return;
     }
-    // Camera is a setup preview only — this is an audio call.
-    cameraStreamRef.current?.getTracks().forEach((t) => t.stop());
-    cameraStreamRef.current = null;
     handedOffRef.current = true;
-    onJoin(stream);
+    onJoin({
+      audioStream,
+      videoStream: cameraStreamRef.current,
+    });
   }, [onJoin]);
 
   return (
@@ -108,7 +113,7 @@ export function DiscoveryLobby({ connectError, onJoin }: DiscoveryLobbyProps): R
             autoPlay
             playsInline
             muted
-            className={`w-full h-full object-cover ${cameraOn ? "" : "hidden"}`}
+            className={`w-full h-full object-cover scale-x-[-1] ${cameraOn ? "" : "hidden"}`}
           />
           {!cameraOn && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white/40 gap-2">

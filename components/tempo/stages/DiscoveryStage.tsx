@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { HandoffModal } from "@/components/tempo/HandoffModal";
 import { DiscoveryCallSession } from "@/components/tempo/stages/DiscoveryCallSession";
-import { DiscoveryLobby } from "@/components/tempo/stages/DiscoveryLobby";
+import { DiscoveryLobby, type DiscoveryJoinStreams } from "@/components/tempo/stages/DiscoveryLobby";
 import { DiscoveryPreCallPrep } from "@/components/tempo/stages/DiscoveryPreCallPrep";
 import { DiscoveryStageLayout } from "@/components/tempo/stages/DiscoveryStageLayout";
 import { DiscoveryTopBar } from "@/components/tempo/stages/DiscoveryTopBar";
@@ -68,6 +68,7 @@ export function DiscoveryStage({
   const [referenceCollapsed, setReferenceCollapsed] = useState(false);
   const [transcript, setTranscript] = useState<DiscoveryTranscriptEntry[]>([]);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showHandoff, setShowHandoff] = useState(initialShowHandoff);
   const [showPresentationHandoff, setShowPresentationHandoff] = useState(false);
@@ -116,11 +117,12 @@ export function DiscoveryStage({
     setPhase("lobby");
   }, [attemptId]);
 
-  const handleJoinCall = useCallback((stream: MediaStream): void => {
+  const handleJoinCall = useCallback((streams: DiscoveryJoinStreams): void => {
     setConnectError("");
     setCallSeconds(0);
     setTranscript([]);
-    setAudioStream(stream);
+    setAudioStream(streams.audioStream);
+    setVideoStream(streams.videoStream);
     void resumePlaybackContext();
     setPhase("connecting");
   }, []);
@@ -132,6 +134,7 @@ export function DiscoveryStage({
   const handleCallError = useCallback((message: string): void => {
     setConnectError(message);
     setAudioStream(null);
+    setVideoStream(null);
     setPhase("lobby");
   }, []);
 
@@ -149,6 +152,7 @@ export function DiscoveryStage({
       setCallSeconds(seconds);
       setTranscript(entries);
       setAudioStream(null);
+      setVideoStream(null);
       setPhase("summary");
       setIsSubmitting(true);
 
@@ -227,6 +231,7 @@ export function DiscoveryStage({
                 <DiscoveryCallSession
                   attemptId={attemptId}
                   audioStream={audioStream}
+                  videoStream={videoStream}
                   onActive={handleCallActive}
                   onError={handleCallError}
                   onTranscriptChange={setTranscript}
