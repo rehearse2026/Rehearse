@@ -106,11 +106,6 @@ export function ObjectionHandlingLobby({
             OBJECTION HANDLING · STAGE 4 OF 5
           </span>
           <h2 className="font-display text-display text-primary">Ready to meet Dr. Saul Kim?</h2>
-          <p className="text-on-surface-variant font-body-md max-w-2xl">
-            Dr. Kim wants a follow-up video call before signing off on Tempo. Enable your mic and
-            camera, then join when you&apos;re ready. He will lead with price — acknowledge before
-            you answer.
-          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch min-h-0">

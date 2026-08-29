@@ -289,14 +289,14 @@ body {
   }
 
   .call-persona-video {
-    @apply absolute inset-0 block h-full w-full object-cover opacity-80;
+    @apply absolute inset-0 block h-full w-full object-cover;
     transform: translateZ(0);
     backface-visibility: hidden;
   }
 
   .call-persona-video-gradient {
     @apply pointer-events-none absolute inset-0;
-    background: linear-gradient(to top, rgb(0 0 0 / 0.6), transparent 45%, rgb(0 0 0 / 0.3));
+    background: linear-gradient(to top, rgb(0 0 0 / 0.15), transparent 20%);
   }
 
   .stage-content-fade {
