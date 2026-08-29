@@ -126,7 +126,7 @@ export function TempoEntryFreshStart({
       </section>
 
       {/* ASSIGNMENT & PRODUCT */}
-      <section className="bg-white py-20">
+      <section className="bg-surface-container-low py-20">
         <div className="max-w-[1100px] mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
             <div>
@@ -184,7 +184,7 @@ export function TempoEntryFreshStart({
       </section>
 
       {/* TIMELINE SECTION */}
-      <section className="bg-surface-container-low py-20 overflow-hidden">
+      <section className="bg-white py-20 overflow-hidden">
         <div className="max-w-[1100px] mx-auto px-6 lg:px-8">
           <div className="text-center mb-16">
             <div className="text-tertiary-container font-bold tracking-widest text-[12px] mb-4 uppercase">
@@ -197,7 +197,7 @@ export function TempoEntryFreshStart({
             <div className="grid grid-cols-1 md:grid-cols-5 gap-6 relative z-10">
               {FRESH_TIMELINE_STAGES.map((stage, index) => (
                 <div key={stage.title} className="space-y-4 group">
-                  <div className="w-12 h-12 rounded-full bg-outline-variant text-on-surface-variant flex items-center justify-center border-4 border-surface-container-low relative">
+                  <div className="w-12 h-12 rounded-full bg-outline-variant text-on-surface-variant flex items-center justify-center border-4 border-white relative">
                     <MaterialIcon name={stage.icon} />
                     <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary-container text-white text-[10px] flex items-center justify-center rounded-full font-bold border-2 border-white">
                       {index + 1}
@@ -223,7 +223,7 @@ export function TempoEntryFreshStart({
       </section>
 
       {/* SCORING & RULES */}
-      <section className="bg-white py-20">
+      <section className="bg-surface-container-low py-20">
         <div className="max-w-[1100px] mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 mb-20">
             <div>
