@@ -1,9 +1,8 @@
 /**
  * DiscoveryCallSession.tsx
- * Anam voice call for Tempo Stage 2 Discovery.
- * Receives the microphone stream the student enabled in the lobby — it never
- * calls getUserMedia itself, so no device indicator turns on here. Bubbles
- * transcript, timer, and end-of-call data up to the parent DiscoveryStage.
+ * Anam video call for Tempo Stage 2 Discovery — shares the Objection Handling
+ * in-call shell (video frame, PiP, speaking rings, control bar).
+ * Receives the microphone stream the student enabled in the lobby.
  *
  * Avatar must stay mounted for the whole call (no remount on connect) — remounting
  * tears down the Anam WebRTC session and silences Dana.
@@ -13,7 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
-import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { TempoCallSessionShell } from "@/components/tempo/stages/TempoCallSessionShell";
 import {
   formatDiscoveryTime,
   parseDiscoveryTranscript,
@@ -31,6 +30,7 @@ import type { AvatarRef } from "@/types";
 type DiscoveryCallSessionProps = {
   attemptId: string;
   audioStream: MediaStream;
+  videoStream?: MediaStream | null;
   onActive: () => void;
   onError: (message: string) => void;
   onTranscriptChange: (entries: DiscoveryTranscriptEntry[]) => void;
@@ -63,12 +63,18 @@ async function waitForAvatarReady(
   return getRef();
 }
 
+/** Returns true when the stream has at least one live video track. */
+function hasLiveVideoTrack(stream: MediaStream | null | undefined): boolean {
+  return Boolean(stream?.getVideoTracks().some((track) => track.readyState === "live"));
+}
+
 /**
  * Mounts the voice session on the lobby-supplied stream and renders call UI.
  */
 export function DiscoveryCallSession({
   attemptId,
   audioStream,
+  videoStream = null,
   onActive,
   onError,
   onTranscriptChange,
@@ -76,13 +82,18 @@ export function DiscoveryCallSession({
   onEnded,
 }: DiscoveryCallSessionProps): React.ReactElement {
   const [connected, setConnected] = useState(false);
+  const [isDanaSpeaking, setIsDanaSpeaking] = useState(false);
+  const [isStudentSpeaking, setIsStudentSpeaking] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
+  const [cameraOff, setCameraOff] = useState(() => !hasLiveVideoTrack(videoStream));
   const [seconds, setSeconds] = useState(0);
 
   const connectStartedRef = useRef(false);
   const isMutedRef = useRef(false);
   const secondsRef = useRef(0);
+  const studentVideoRef = useRef<HTMLVideoElement | null>(null);
   const activeAudioStreamRef = useRef(audioStream);
+  const activeVideoStreamRef = useRef<MediaStream | null>(videoStream);
 
   const voice = useSimulationVoiceSession({
     systemPrompt: DANA_REYES_SYSTEM_PROMPT,
@@ -98,6 +109,34 @@ export function DiscoveryCallSession({
 
   const callbacksRef = useRef({ onActive, onError });
   callbacksRef.current = { onActive, onError };
+
+  const attachVideoPreview = useCallback((stream: MediaStream | null): void => {
+    const el = studentVideoRef.current;
+    if (!el) {
+      return;
+    }
+    if (!stream || !hasLiveVideoTrack(stream)) {
+      el.srcObject = null;
+      return;
+    }
+    el.srcObject = stream;
+    void el.play().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    activeVideoStreamRef.current = videoStream;
+    if (videoStream && hasLiveVideoTrack(videoStream)) {
+      setCameraOff(false);
+    }
+    attachVideoPreview(hasLiveVideoTrack(videoStream) ? videoStream : null);
+  }, [videoStream, attachVideoPreview]);
+
+  const stopVideoTracks = useCallback((): void => {
+    activeVideoStreamRef.current?.getVideoTracks().forEach((track) => track.stop());
+    activeVideoStreamRef.current = null;
+    attachVideoPreview(null);
+    setCameraOff(true);
+  }, [attachVideoPreview]);
 
   // ── Connect once on mount (mic already granted in the lobby) ───
   useEffect(() => {
@@ -165,6 +204,25 @@ export function DiscoveryCallSession({
     onTranscriptChange(parseDiscoveryTranscript(raw, secondsRef.current));
   }, [voice.userTranscripts, voice.personaTranscripts, connected, onTranscriptChange]);
 
+  // ── Speaking indicators ───
+  useEffect(() => {
+    if (!voice.personaTranscripts || !connected) {
+      return;
+    }
+    setIsDanaSpeaking(true);
+    const timer = window.setTimeout(() => setIsDanaSpeaking(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [voice.personaTranscripts, connected]);
+
+  useEffect(() => {
+    if (!voice.userTranscripts || !connected) {
+      return;
+    }
+    setIsStudentSpeaking(true);
+    const timer = window.setTimeout(() => setIsStudentSpeaking(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [voice.userTranscripts, connected]);
+
   const toggleMute = useCallback((): void => {
     if (micMuted) {
       void (async (): Promise<void> => {
@@ -193,79 +251,60 @@ export function DiscoveryCallSession({
     voiceRef.current.pauseMic();
   }, [micMuted]);
 
+  const toggleCamera = useCallback((): void => {
+    if (!cameraOff) {
+      stopVideoTracks();
+      return;
+    }
+
+    void (async (): Promise<void> => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const track = stream.getVideoTracks()[0];
+        if (!track) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        const nextStream = new MediaStream([track]);
+        activeVideoStreamRef.current = nextStream;
+        setCameraOff(false);
+        attachVideoPreview(nextStream);
+      } catch {
+        setCameraOff(true);
+      }
+    })();
+  }, [cameraOff, stopVideoTracks, attachVideoPreview]);
+
   const handleEndCall = useCallback((): void => {
     const finalSeconds = secondsRef.current;
     voiceRef.current.endCall();
     activeAudioStreamRef.current.getTracks().forEach((track) => track.stop());
+    activeVideoStreamRef.current?.getTracks().forEach((track) => track.stop());
     const raw = voiceRef.current.getFullTranscript();
     const entries = parseDiscoveryTranscript(raw, finalSeconds);
     onEnded(raw, finalSeconds, entries);
   }, [onEnded]);
 
+  const showCameraPreview = !cameraOff;
+
   return (
-    <section className="flex-1 bg-[#0a0a0a] relative flex flex-col items-center justify-center p-lg min-w-0 overflow-hidden">
-      <div className="relative w-full max-w-xl aspect-video rounded-2xl overflow-hidden border border-white/15 shadow-2xl bg-black">
-        {/* Single Avatar mount for the whole call — do not remount when connected flips. */}
-        <Avatar ref={voice.avatarRef} />
-
-        {!connected && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70">
-            <div className="w-10 h-10 border-2 border-white/20 border-t-tertiary-container rounded-full animate-spin" />
-            <p className="mt-4 text-sm text-white/70">Connecting to Dana Reyes…</p>
-            {voice.statusText.length > 0 && (
-              <p className="mt-2 text-xs text-white/50 max-w-sm text-center px-4">
-                {voice.statusText}
-              </p>
-            )}
-          </div>
-        )}
-
-        {connected && (
-          <>
-            <div className="absolute bottom-4 left-4 z-10 rounded-lg bg-black/45 backdrop-blur-md px-3 py-2">
-              <p className="text-white font-headline-md text-sm">Dana Reyes</p>
-              <p className="text-white/60 font-label-sm text-[11px]">
-                Director of Operations · Summit Dental
-              </p>
-            </div>
-            <div className="absolute bottom-4 right-4 z-10 flex items-center gap-2 bg-black/45 backdrop-blur-md px-3 py-1.5 rounded-full">
-              <MaterialIcon name="timer" className="text-white/70 text-[16px]" />
-              <span className="font-code-md text-white/85 text-sm">
-                {formatDiscoveryTime(seconds)}
-              </span>
-            </div>
-          </>
-        )}
-      </div>
-
-      {connected && voice.statusText.length > 0 && (
-        <p className="mt-4 text-white/55 text-sm text-center max-w-md">{voice.statusText}</p>
-      )}
-
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-30">
-        <nav className="rounded-full backdrop-blur-xl bg-black/20 border border-white/10 shadow-2xl flex items-center p-2 gap-2">
-          <button
-            type="button"
-            onClick={toggleMute}
-            className={`p-3 rounded-full transition-all active:scale-90 ${
-              micMuted ? "bg-error text-white" : "hover:bg-white/10 text-on-primary"
-            }`}
-          >
-            <MaterialIcon name={micMuted ? "mic_off" : "mic"} />
-          </button>
-          <button
-            type="button"
-            onClick={handleEndCall}
-            className="bg-error text-white rounded-full p-4 transition-all active:scale-90 shadow-lg"
-          >
-            <MaterialIcon name="call_end" filled />
-          </button>
-        </nav>
-      </div>
-
-      <p className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white/30 text-[10px]">
-        This call is being recorded for scoring purposes
-      </p>
-    </section>
+    <TempoCallSessionShell
+      connected={connected}
+      isPersonaSpeaking={isDanaSpeaking}
+      isStudentSpeaking={isStudentSpeaking}
+      connectingMessage="Connecting to Dana Reyes…"
+      statusText={voice.statusText}
+      personaName="Dana Reyes"
+      personaRole="Director of Operations"
+      avatar={<Avatar ref={voice.avatarRef} />}
+      studentVideoRef={studentVideoRef}
+      showCameraPreview={showCameraPreview}
+      micMuted={micMuted}
+      cameraOff={cameraOff}
+      formattedTime={formatDiscoveryTime(seconds)}
+      onToggleMute={toggleMute}
+      onToggleCamera={toggleCamera}
+      onEndCall={handleEndCall}
+    />
   );
 }
