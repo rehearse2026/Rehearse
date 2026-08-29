@@ -83,6 +83,14 @@ function OnboardingVideoPlayer({
     setIsMuted((muted) => !muted);
   }, []);
 
+  const handleVolumeChange = useCallback((nextVolume: number): void => {
+    const clamped = Math.min(1, Math.max(0, nextVolume));
+    setVolume(clamped);
+    if (clamped > 0) {
+      setIsMuted(false);
+    }
+  }, []);
+
   const handleSeek = useCallback((nextTime: number): void => {
     const video = videoRef.current;
     if (!video || !Number.isFinite(nextTime)) {
@@ -178,6 +186,7 @@ function OnboardingVideoPlayer({
   }, [autoPlay]);
 
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  const displayVolume = isMuted ? 0 : volume;
 
   return (
     <div
@@ -230,10 +239,11 @@ function OnboardingVideoPlayer({
         }`}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-3 flex items-center gap-3">
-          <span className="font-code-md text-[11px] text-white/70 tabular-nums w-10 text-right">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="hidden sm:block font-code-md text-[11px] text-white/70 tabular-nums w-9 text-right shrink-0">
             {formatVideoTime(currentTime)}
           </span>
+
           <input
             type="range"
             min={0}
@@ -252,32 +262,51 @@ function OnboardingVideoPlayer({
             }}
             onChange={(event) => handleSeek(Number(event.target.value))}
             aria-label="Seek video"
-            className="h-1 flex-1 cursor-pointer accent-white"
+            className="h-1 min-w-0 flex-1 cursor-pointer accent-white"
           />
-          <span className="font-code-md text-[11px] text-white/70 tabular-nums w-10">
+
+          <span className="hidden sm:block font-code-md text-[11px] text-white/70 tabular-nums w-9 shrink-0">
             {formatVideoTime(safeDuration)}
           </span>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={toggleMute}
-            aria-label={isMuted || volume === 0 ? "Unmute video" : "Mute video"}
-            className="text-white/90 hover:text-white transition-colors"
-          >
-            <MaterialIcon
-              name={isMuted || volume === 0 ? "volume_off" : volume < 0.5 ? "volume_down" : "volume_up"}
-              className="text-[22px]"
-            />
-          </button>
+          <div className="relative flex shrink-0 items-center group/volume">
+            <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 -translate-x-1/2 rounded-lg border border-white/10 bg-black/90 px-2 py-3 opacity-0 transition-opacity duration-150 group-hover/volume:opacity-100 group-focus-within/volume:opacity-100 group-hover/volume:pointer-events-auto group-focus-within/volume:pointer-events-auto">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={displayVolume}
+                onChange={(event) => handleVolumeChange(Number(event.target.value))}
+                aria-label="Video volume"
+                className="h-20 w-1 cursor-pointer accent-white [direction:rtl] [writing-mode:vertical-lr]"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={toggleMute}
+              aria-label={isMuted || volume === 0 ? "Unmute video" : "Mute video"}
+              className="text-white/90 hover:text-white transition-colors p-1"
+            >
+              <MaterialIcon
+                name={
+                  isMuted || volume === 0
+                    ? "volume_off"
+                    : volume < 0.5
+                      ? "volume_down"
+                      : "volume_up"
+                }
+                className="text-[22px]"
+              />
+            </button>
+          </div>
 
           <button
             type="button"
             onClick={toggleCaptions}
             aria-label={captionsOn ? "Hide captions" : "Show captions"}
             aria-pressed={captionsOn}
-            className={`ml-auto transition-colors ${
+            className={`shrink-0 p-1 transition-colors ${
               captionsOn ? "text-white" : "text-white/60 hover:text-white/90"
             }`}
           >
