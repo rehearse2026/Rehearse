@@ -148,13 +148,13 @@ function RoadmapNode({
   }
 
   return (
-    <div className="flex flex-col items-center gap-4 bg-primary-container px-4 opacity-40">
-      <div className="w-12 h-12 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white/60">
+    <div className="flex flex-col items-center gap-4 bg-primary-container px-4">
+      <div className="w-12 h-12 rounded-full bg-white/20 border border-white/40 flex items-center justify-center text-white/80">
         <MaterialIcon name={icon} />
       </div>
       <div className="text-center">
-        <p className="font-code-md text-white/50 font-bold text-[13px]">STAGE {stage.number}</p>
-        <p className="text-body-md font-bold text-white">{stage.title}</p>
+        <p className="font-code-md text-white/70 font-bold text-[13px]">STAGE {stage.number}</p>
+        <p className="text-body-md font-bold text-white/85">{stage.title}</p>
       </div>
     </div>
   );
