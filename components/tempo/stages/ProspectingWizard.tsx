@@ -1,6 +1,7 @@
 /**
  * ProspectingWizard.tsx
- * Stage 1 of the Tempo simulation — 5-step prospecting wizard with manager handoff.
+ * Stage 1 of the Tempo simulation — 5-step prospecting wizard (ICP → Data Room →
+ * Build Your Agent → Select Lead → Opening Message) with manager handoff.
  * Only rendered for Tempo in the Rehearse Essentials default class.
  */
 

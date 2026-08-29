@@ -1,11 +1,12 @@
 /**
  * ProspectingStepPanels.tsx
  * Step content panels for the Tempo Stage 1 Prospecting wizard.
- * Steps: Data Room → Select Target Lead → Opening Message.
+ * Steps: ICP → Data Room → Build Your Agent → Select Target Lead → Opening Message.
  */
 
 "use client";
 
+import { ProspectingAgentStep } from "@/components/tempo/stages/ProspectingAgentStep";
 import { ProspectingDataRoom } from "@/components/tempo/stages/ProspectingDataRoom";
 import { ProspectingIcpStep } from "@/components/tempo/stages/ProspectingIcpStep";
 import { ProspectingLeadSelectionStep } from "@/components/tempo/stages/ProspectingLeadSelectionStep";
@@ -61,16 +62,6 @@ export function ProspectingStepPanels({
     );
   }
 
-  if (currentStep === 2) {
-    return (
-      <ProspectingLeadSelectionStep
-        attemptId={attemptId}
-        selectedLeadId={state.selectedLeadId}
-        onSelected={onLeadSelected}
-      />
-    );
-  }
-
   if (currentStep === 1) {
     return (
       <ProspectingDataRoom
@@ -80,6 +71,20 @@ export function ProspectingStepPanels({
         onShortlistChange={onShortlistChange}
         onContinue={onResearchContinue}
         canContinue={canResearchContinue}
+      />
+    );
+  }
+
+  if (currentStep === 2) {
+    return <ProspectingAgentStep attemptId={attemptId} />;
+  }
+
+  if (currentStep === 3) {
+    return (
+      <ProspectingLeadSelectionStep
+        attemptId={attemptId}
+        selectedLeadId={state.selectedLeadId}
+        onSelected={onLeadSelected}
       />
     );
   }

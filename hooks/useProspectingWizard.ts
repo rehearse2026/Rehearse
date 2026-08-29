@@ -127,7 +127,7 @@ export function useProspectingWizard({
           ...nextState,
           icpGateComplete: icpDone,
           currentStep: icpDone ? nextState.currentStep : 0,
-          prospectingStepVersion: icpDone ? nextState.prospectingStepVersion ?? 2 : undefined,
+          prospectingStepVersion: icpDone ? nextState.prospectingStepVersion ?? 3 : undefined,
         };
         saveProspectingWizardToStorage(attemptId, nextState);
 
@@ -171,7 +171,7 @@ export function useProspectingWizard({
           ...prev,
           icpGateComplete: true,
           currentStep: Math.max(prev.currentStep, 1),
-          prospectingStepVersion: 2,
+          prospectingStepVersion: 3,
         };
         void persistState(next);
         return next;
@@ -288,7 +288,7 @@ export function useProspectingWizard({
   const completeLeadSelection = useCallback(
     async (leadId: string): Promise<void> => {
       setState((prev) => {
-        const next = { ...prev, selectedLeadId: leadId, currentStep: 3, prospectingStepVersion: 2 };
+        const next = { ...prev, selectedLeadId: leadId, currentStep: 4, prospectingStepVersion: 3 };
         void persistState(next);
         return next;
       });

@@ -7,7 +7,7 @@
 import type { ChatMessage } from "@/types";
 import { parseProspectingIcpState } from "@/lib/tempo-icp-criteria";
 
-export type ProspectingStepId = "icp" | "research" | "select_lead" | "opening";
+export type ProspectingStepId = "icp" | "research" | "agent" | "select_lead" | "opening";
 
 export type ProspectingStepDefinition = {
   id: ProspectingStepId;
@@ -21,6 +21,11 @@ export const PROSPECTING_STEPS: readonly ProspectingStepDefinition[] = [
     id: "research",
     label: "Data Room",
     description: "Review documents and shortlist three accounts",
+  },
+  {
+    id: "agent",
+    label: "Build Your Agent",
+    description: "Design an AI system to do what you just did by hand",
   },
   {
     id: "select_lead",
@@ -152,7 +157,10 @@ export type ProspectingWizardState = {
   prospectingHandoffSeen: boolean;
   /** CRM lead id marked as the Prospecting target (status selected). */
   selectedLeadId: string | null;
-  /** Bumped when PROSPECTING_STEPS gained the ICP row at index 0. */
+  /**
+   * Bumped when PROSPECTING_STEPS layout changes (v2: ICP at 0; v3: agent at 2).
+   * normalizeProspectingWizardState migrates older versions forward.
+   */
   prospectingStepVersion?: number;
   /**
    * True after ICP pre-gate Continue. ICP payload itself lives at stage_data.icp
@@ -242,12 +250,24 @@ export function normalizeProspectingWizardState(
 
   const icpRecord = parseProspectingIcpState(anyRaw.icp);
 
+  const savedVersion =
+    typeof anyRaw.prospectingStepVersion === "number" ? anyRaw.prospectingStepVersion : 1;
+
   let resolvedStep = step;
   if (!icpRecord?.feedbackSeen) {
     resolvedStep = 0;
-  } else if (anyRaw.prospectingStepVersion !== 2) {
-    resolvedStep = Math.min(step + 1, PROSPECTING_STEPS.length - 1);
+  } else {
+    // v1 → v2: ICP row inserted at index 0 (unchanged behavior).
+    if (savedVersion < 2) {
+      resolvedStep = Math.min(resolvedStep + 1, PROSPECTING_STEPS.length - 1);
+    }
+    // v2 → v3: agent row inserted at index 2; steps 0–1 unchanged.
+    if (savedVersion < 3 && resolvedStep >= 2) {
+      resolvedStep = Math.min(resolvedStep + 1, PROSPECTING_STEPS.length - 1);
+    }
   }
+
+  const migratedVersion = icpRecord?.feedbackSeen ? 3 : savedVersion;
 
   return {
     ...DEFAULT_PROSPECTING_WIZARD_STATE,
@@ -267,8 +287,7 @@ export function normalizeProspectingWizardState(
     prospectingHandoffSeen: Boolean(anyRaw.prospectingHandoffSeen),
     selectedLeadId,
     currentStep: resolvedStep,
-    prospectingStepVersion:
-      typeof anyRaw.prospectingStepVersion === "number" ? anyRaw.prospectingStepVersion : undefined,
+    prospectingStepVersion: icpRecord?.feedbackSeen ? migratedVersion : undefined,
     /** Only skip the ICP gate after manager feedback Continue (persisted on stage_data.icp). */
     icpGateComplete: icpRecord?.feedbackSeen === true,
   };
@@ -395,7 +414,7 @@ export function countWords(text: string): number {
 
 /**
  * Returns whether the student can advance from the current wizard step.
- * Indices: ICP (0) → Data Room (1) → Lead Selection (2) → Opening (3).
+ * Indices: ICP (0) → Data Room (1) → Agent (2) → Lead Selection (3) → Opening (4).
  */
 export function canAdvanceProspectingStep(
   stepIndex: number,
@@ -407,8 +426,10 @@ export function canAdvanceProspectingStep(
     case 1:
       return state.shortlistedCompanyIds.length === 3;
     case 2:
-      return Boolean(state.selectedLeadId);
+      return true;
     case 3:
+      return Boolean(state.selectedLeadId);
+    case 4:
       return canSubmitProspectingBrief(state);
     default:
       return false;
