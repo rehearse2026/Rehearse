@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
-import { TempoOnboardingVideoTrigger } from "@/components/tempo/TempoOnboardingVideoModal";
+import { TempoOnboardingVideoInline } from "@/components/tempo/TempoOnboardingVideoModal";
 import { COLORS } from "@/lib/design-tokens";
 import { TEMPO_STAGES } from "@/lib/tempo-simulation";
 
@@ -115,6 +115,9 @@ export function TempoEntryFreshStart({
               </div>
             </div>
           </div>
+        </div>
+        <div className="max-w-[1100px] mx-auto px-6 lg:px-8 mt-12">
+          <TempoOnboardingVideoInline />
         </div>
       </section>
 
@@ -306,16 +309,13 @@ export function TempoEntryFreshStart({
             Stage 1: {TEMPO_STAGES[0]?.title ?? "Prospecting"} takes about 15 minutes. <br />
             Your progress will be saved automatically.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <TempoOnboardingVideoTrigger />
-            <Link
-              href={ctaHref}
-              className="inline-flex items-center gap-3 bg-tertiary-fixed text-on-tertiary-fixed hover:opacity-90 transition-all px-10 py-5 rounded-full font-bold text-headline-md shadow-xl hover:scale-105 active:scale-95 group"
-            >
-              Begin Simulation
-              <MaterialIcon name="arrow_forward" className="group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
+          <Link
+            href={ctaHref}
+            className="inline-flex items-center gap-3 bg-tertiary-fixed text-on-tertiary-fixed hover:opacity-90 transition-all px-10 py-5 rounded-full font-bold text-headline-md shadow-xl hover:scale-105 active:scale-95 group"
+          >
+            Begin Simulation
+            <MaterialIcon name="arrow_forward" className="group-hover:translate-x-1 transition-transform" />
+          </Link>
           <div className="mt-8 text-white/40 text-body-md">Estimated total time: ~60 minutes</div>
         </div>
       </section>

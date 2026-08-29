@@ -6,6 +6,7 @@
 
 import Link from "next/link";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
+import { TempoOnboardingVideoTrigger } from "@/components/tempo/TempoOnboardingVideoModal";
 import { RestartSimulationButton } from "@/components/simulation/RestartSimulationButton";
 import {
   TEMPO_STAGES,
@@ -316,7 +317,7 @@ export function TempoEntryInProgress({
 
         {/* CTA */}
         <section className="bg-primary-container py-20 px-6 lg:px-8">
-          <div className="max-w-2xl mx-auto text-center flex flex-col items-center">
+          <div className="max-w-2xl mx-auto text-center flex flex-col items-center gap-4">
             <Link
               href={ctaHref}
               className="bg-tertiary-container hover:opacity-90 text-on-tertiary-fixed font-bold text-lg px-12 py-4 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg flex items-center gap-3 group"
@@ -324,6 +325,7 @@ export function TempoEntryInProgress({
               {ctaLabel}
               <MaterialIcon name="arrow_forward" className="group-hover:translate-x-1 transition-transform" />
             </Link>
+            <TempoOnboardingVideoTrigger />
             {lastStageScore !== null && (
               <div className="mt-6 flex flex-col items-center gap-2">
                 <p className="text-white/40 text-[12px] font-code-md tracking-widest uppercase">

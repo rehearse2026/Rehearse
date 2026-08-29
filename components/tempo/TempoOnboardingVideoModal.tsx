@@ -1,7 +1,6 @@
 /**
  * TempoOnboardingVideoModal.tsx
- * Modal player for the Tempo onboarding welcome video on the simulation entry page.
- * Exports TempoOnboardingVideoTrigger — a self-contained button + modal for TempoEntryFreshStart.
+ * Onboarding welcome video for Tempo simulation entry — inline player (fresh start) and modal trigger (in progress).
  */
 
 "use client";
@@ -127,6 +126,30 @@ export function TempoOnboardingVideoModal({
       </div>
     </div>,
     document.body
+  );
+}
+
+/**
+ * Inline hero player — embedded below the fresh-start briefing, no modal.
+ */
+export function TempoOnboardingVideoInline(): React.ReactElement {
+  return (
+    <div className="w-full">
+      <div className="text-white/50 text-[12px] font-bold tracking-widest uppercase mb-3">
+        Onboarding Briefing
+      </div>
+      <div className="rounded-xl border border-white/10 overflow-hidden bg-black shadow-2xl aspect-video">
+        <video
+          src={TEMPO_ONBOARDING_VIDEO_URL}
+          controls
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-contain"
+        >
+          <track kind="captions" />
+        </video>
+      </div>
+    </div>
   );
 }
 
