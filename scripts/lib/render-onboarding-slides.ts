@@ -1,6 +1,6 @@
 /**
  * render-onboarding-slides.ts
- * Renders Tempo onboarding deck slides as 1920x1080 PNG buffers via SVG + sharp.
+ * Renders Tempo onboarding deck slides as 960x1080 PNG buffers (left-half layout) via SVG + sharp.
  */
 
 import sharp from "sharp";
@@ -9,7 +9,8 @@ import {
   type OnboardingSlide,
 } from "../config/tempo-onboarding-slides";
 
-const SLIDE_WIDTH = 1920;
+/** Left-half slide canvas — composited beside presenter in composite-onboarding-pip.ts */
+const SLIDE_WIDTH = 960;
 const SLIDE_HEIGHT = 1080;
 
 const COLORS = {
@@ -33,32 +34,32 @@ function escapeSvg(text: string): string {
 }
 
 /**
- * Builds one professional slide as an SVG string.
+ * Builds one professional slide as an SVG string sized for the left half of the frame.
  */
 function slideToSvg(slide: OnboardingSlide, index: number): string {
   const bulletLines = slide.bullets
     .map(
       (bullet, bulletIndex) => `
-        <text x="120" y="${420 + bulletIndex * 72}" fill="${COLORS.text}" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="500">
+        <text x="56" y="${400 + bulletIndex * 64}" fill="${COLORS.text}" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="500">
           ${escapeSvg(bullet)}
         </text>`
     )
     .join("");
 
   const subtitle = slide.subtitle
-    ? `<text x="120" y="250" fill="${COLORS.accentSoft}" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="500">${escapeSvg(slide.subtitle)}</text>`
+    ? `<text x="56" y="228" fill="${COLORS.accentSoft}" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="500">${escapeSvg(slide.subtitle)}</text>`
     : "";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${SLIDE_WIDTH}" height="${SLIDE_HEIGHT}" viewBox="0 0 ${SLIDE_WIDTH} ${SLIDE_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
   <rect width="100%" height="100%" fill="${COLORS.background}" />
-  <rect x="0" y="0" width="100%" height="12" fill="${COLORS.accent}" />
-  <rect x="80" y="120" width="1760" height="840" rx="24" fill="${COLORS.panel}" opacity="0.55" />
-  <text x="120" y="170" fill="${COLORS.accent}" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="4">TEMPO ONBOARDING</text>
-  <text x="120" y="330" fill="${COLORS.text}" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="700">${escapeSvg(slide.title)}</text>
+  <rect x="0" y="0" width="100%" height="8" fill="${COLORS.accent}" />
+  <rect x="32" y="96" width="896" height="880" rx="16" fill="${COLORS.panel}" opacity="0.55" />
+  <text x="56" y="148" fill="${COLORS.accent}" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="3">TEMPO ONBOARDING</text>
+  <text x="56" y="300" fill="${COLORS.text}" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700">${escapeSvg(slide.title)}</text>
   ${subtitle}
   ${bulletLines}
-  <text x="1780" y="1020" text-anchor="end" fill="${COLORS.muted}" font-family="Arial, Helvetica, sans-serif" font-size="24">${index + 1} / ${TEMPO_ONBOARDING_SLIDES.length}</text>
+  <text x="904" y="1020" text-anchor="end" fill="${COLORS.muted}" font-family="Arial, Helvetica, sans-serif" font-size="20">${index + 1} / ${TEMPO_ONBOARDING_SLIDES.length}</text>
 </svg>`;
 }
 

@@ -1,17 +1,16 @@
 /**
  * composite-onboarding-pip.ts
- * One-off local ffmpeg compositor: slide PNG deck + existing tempo-welcome.mp4 PiP preview.
- * No HeyGen API calls, no Supabase writes — output stays under build/onboarding-pip-work/.
+ * Local ffmpeg compositor: slide deck (left 50%) + HeyGen presenter video (right 50%).
+ * No HeyGen API calls. Supabase upload is handled separately after local preview review.
  */
 
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { execFileSync, spawnSync } from "child_process";
 import { join } from "path";
-import { pipeline } from "stream/promises";
-import { Readable } from "stream";
 import ffmpegPath from "ffmpeg-static";
+import { renderOnboardingSlides } from "./lib/render-onboarding-slides";
 
-// ── Constants (from docs/tempo-onboarding-video-generation.md) ────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const SLIDE_FILE_NAMES = [
   "slide-01-welcome.png",
@@ -31,28 +30,16 @@ const SEGMENT_FILE_NAMES = [
 
 const DOCUMENTED_SEGMENT_DURATIONS = [13.2, 17.8, 12.2, 16.8, 12.4];
 
-const WELCOME_VIDEO_URL =
-  "https://visuvrjmcoanndndimfw.supabase.co/storage/v1/object/public/onboarding-videos/tempo-welcome.mp4";
-
-const SLIDES_BASE_URL =
-  "https://visuvrjmcoanndndimfw.supabase.co/storage/v1/object/public/onboarding-videos/slides/";
+const FRAME_WIDTH = 1920;
+const FRAME_HEIGHT = 1080;
+const HALF_WIDTH = FRAME_WIDTH / 2;
 
 const WORK_DIR = join(process.cwd(), "build", "onboarding-pip-work");
-const WELCOME_VIDEO_NAME = "tempo-welcome.mp4";
+const PRESENTER_NAME = "presenter-heygen.mp4";
 const SLIDES_TRACK_NAME = "slides-track.mp4";
 const OUTPUT_NAME = "onboarding-pip-preview.mp4";
 
 const DURATION_TOLERANCE_SEC = 0.5;
-const PIP_HEIGHT_PX = 440;
-const PIP_MARGIN_PX = 64;
-const PIP_BORDER_PX = 4;
-
-type InputSource = "local" | "downloaded";
-
-type ResolvedInput = {
-  path: string;
-  source: InputSource;
-};
 
 type SegmentTiming = {
   index: number;
@@ -103,93 +90,23 @@ function runFfmpeg(args: string[]): void {
 }
 
 /**
- * Reads deck gold accent hex from render-onboarding-slides.ts without importing it.
+ * Searches candidate directories for a presenter-only HeyGen MP4 (not the composited upload).
  */
-function readDeckAccentColor(): { hex: string; flaggedFallback: boolean } {
-  const sourcePath = join(process.cwd(), "scripts/lib/render-onboarding-slides.ts");
-  if (!existsSync(sourcePath)) {
-    console.warn("WARNING: Could not read scripts/lib/render-onboarding-slides.ts — using #FFFFFF border.");
-    return { hex: "#FFFFFF", flaggedFallback: true };
-  }
-
-  const source = readFileSync(sourcePath, "utf8");
-  const match = source.match(/accent:\s*"([^"]+)"/);
-  if (!match) {
-    console.warn("WARNING: accent color not found in render-onboarding-slides.ts — using #FFFFFF border.");
-    return { hex: "#FFFFFF", flaggedFallback: true };
-  }
-
-  return { hex: match[1], flaggedFallback: false };
-}
-
-/**
- * Converts #RRGGBB to ffmpeg pad color (no hash).
- */
-function ffmpegColor(hex: string): string {
-  return hex.replace(/^#/, "");
-}
-
-/**
- * Searches candidate directories for a file; returns first hit or null.
- */
-function findLocalFile(fileName: string, subdirs: string[] = [""]): string | null {
-  const roots = [
-    WORK_DIR,
-    join(process.cwd(), "build"),
-    join(process.cwd(), "tmp"),
-    join(process.cwd(), "output"),
-    "/tmp",
+function findPresenterVideo(): string | null {
+  const candidates = [
+    join(WORK_DIR, PRESENTER_NAME),
+    join(WORK_DIR, "tempo-welcome.mp4"),
+    "/tmp/tempo-welcome.mp4",
+    join(process.cwd(), "build", "presenter-heygen.mp4"),
   ];
 
-  for (const root of roots) {
-    for (const subdir of subdirs) {
-      const candidate = subdir ? join(root, subdir, fileName) : join(root, fileName);
-      if (existsSync(candidate)) {
-        return candidate;
-      }
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
     }
   }
 
   return null;
-}
-
-/**
- * Downloads a public URL once into the work directory.
- */
-async function downloadToWorkDir(fileName: string, url: string): Promise<string> {
-  const dest = join(WORK_DIR, fileName);
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Download failed for ${url}: HTTP ${response.status}`);
-  }
-  if (!response.body) {
-    throw new Error(`Download failed for ${url}: empty response body.`);
-  }
-
-  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(dest));
-  return dest;
-}
-
-/**
- * Resolves an input file from local search paths or a one-time public download.
- */
-async function resolveInput(
-  fileName: string,
-  downloadUrl: string | null,
-  localSubdirs: string[] = [""]
-): Promise<ResolvedInput> {
-  const local = findLocalFile(fileName, localSubdirs);
-  if (local) {
-    return { path: local, source: "local" };
-  }
-
-  if (!downloadUrl) {
-    throw new Error(`Missing required input "${fileName}" — not found locally and no download URL provided.`);
-  }
-
-  mkdirSync(WORK_DIR, { recursive: true });
-  const downloaded = await downloadToWorkDir(fileName, downloadUrl);
-  return { path: downloaded, source: "downloaded" };
 }
 
 /**
@@ -217,7 +134,7 @@ function resolveSegmentDurations(): {
   console.warn("");
   console.warn("=".repeat(72));
   console.warn("WARNING: Per-segment MP4s not found locally.");
-  console.warn("Using documented fallback durations from tempo-onboarding-video-generation.md:");
+  console.warn("Using documented fallback durations:");
   console.warn(`  ${DOCUMENTED_SEGMENT_DURATIONS.join(", ")}`);
   console.warn("Slide boundaries are NOT measured — verify alignment by eye in the preview.");
   console.warn("=".repeat(72));
@@ -227,7 +144,42 @@ function resolveSegmentDurations(): {
 }
 
 /**
- * Renders one still slide to a short MP4 clip with an exact duration.
+ * Searches candidate directories for a file; returns first hit or null.
+ */
+function findLocalFile(fileName: string, subdirs: string[] = [""]): string | null {
+  const roots = [WORK_DIR, join(process.cwd(), "build"), join(process.cwd(), "tmp"), "/tmp"];
+
+  for (const root of roots) {
+    for (const subdir of subdirs) {
+      const candidate = subdir ? join(root, subdir, fileName) : join(root, fileName);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Renders slide PNGs from config into the work directory.
+ */
+async function renderSlidesToWorkDir(): Promise<string[]> {
+  const rendered = await renderOnboardingSlides();
+  const paths: string[] = [];
+
+  for (const slide of rendered) {
+    const dest = join(WORK_DIR, slide.fileName);
+    writeFileSync(dest, slide.pngBuffer);
+    paths.push(dest);
+    console.log(`  rendered ${slide.fileName}`);
+  }
+
+  return paths;
+}
+
+/**
+ * Renders one still slide to a short MP4 clip with an exact duration (left-half size).
  */
 function renderSlideClip(slidePath: string, durationSec: number, outputPath: string): void {
   runFfmpeg([
@@ -241,7 +193,7 @@ function renderSlideClip(slidePath: string, durationSec: number, outputPath: str
     "-i",
     slidePath,
     "-vf",
-    "scale=1920:1080,setsar=1",
+    `scale=${HALF_WIDTH}:${FRAME_HEIGHT},setsar=1`,
     "-r",
     "30",
     "-pix_fmt",
@@ -293,52 +245,28 @@ function buildSegmentTimings(durations: number[], source: "measured" | "document
 }
 
 /**
- * Reports whether bottom-right PiP likely overlaps slide bullet text.
- */
-function reportPipOverlapRisk(): void {
-  console.log("");
-  console.log("PiP overlap assessment (from scripts/lib/render-onboarding-slides.ts layout):");
-  console.log("  - Bullets are left-aligned at x=120, starting y=420 (+72px per line).");
-  console.log("  - Slide page counter sits bottom-right at x=1780, y=1020.");
-  console.log(
-    `  - PiP box: ~${PIP_HEIGHT_PX}px tall, ${PIP_MARGIN_PX}px margin from bottom-right (16:9 width ~782px).`
-  );
-  console.log("  - Bullet text stays on the left; PiP occupies the bottom-right quadrant.");
-  console.log("  - Slide 4 (five bullets) extends vertically to ~y=708 — overlaps PiP vertically,");
-  console.log("    but bullets remain left-aligned and are unlikely to sit under the presenter.");
-  console.log("  - The bottom-right page counter (e.g. \"5 / 5\") WILL likely be covered by the PiP box.");
-  console.log("  - Repositioning the PiP is a human review decision — this script does not change layout.");
-}
-
-/**
- * Main entry: verify inputs, build slides track, composite PiP, print report.
+ * Main entry: render slides, build track, composite 50/50 split, print report.
  */
 async function main(): Promise<void> {
   mkdirSync(WORK_DIR, { recursive: true });
 
-  const welcomeResolved = await resolveInput(WELCOME_VIDEO_NAME, WELCOME_VIDEO_URL);
-  console.log(`tempo-welcome.mp4: ${welcomeResolved.source} → ${welcomeResolved.path}`);
-
-  const slideResolutions: ResolvedInput[] = [];
-  for (const slideName of SLIDE_FILE_NAMES) {
-    const resolved = await resolveInput(slideName, `${SLIDES_BASE_URL}${slideName}`, ["slides"]);
-    slideResolutions.push(resolved);
-    console.log(`${slideName}: ${resolved.source} → ${resolved.path}`);
+  const presenterSource = findPresenterVideo();
+  if (!presenterSource) {
+    throw new Error(
+      `Missing presenter-only HeyGen MP4. Place it at ${join(WORK_DIR, PRESENTER_NAME)} ` +
+        "or /tmp/tempo-welcome.mp4 (original talking-head file, not the composited upload)."
+    );
   }
 
-  const welcomeDest = join(WORK_DIR, WELCOME_VIDEO_NAME);
-  if (welcomeResolved.path !== welcomeDest) {
-    copyFileSync(welcomeResolved.path, welcomeDest);
+  const presenterDest = join(WORK_DIR, PRESENTER_NAME);
+  if (presenterSource !== presenterDest) {
+    copyFileSync(presenterSource, presenterDest);
   }
-  const welcomeInWork = welcomeDest;
 
-  const slidesInWork = slideResolutions.map((resolution, index) => {
-    const dest = join(WORK_DIR, SLIDE_FILE_NAMES[index]);
-    if (resolution.path !== dest) {
-      copyFileSync(resolution.path, dest);
-    }
-    return dest;
-  });
+  console.log(`presenter video: local → ${presenterSource}`);
+
+  console.log("Rendering slide PNGs from config ...");
+  const slidesInWork = await renderSlidesToWorkDir();
 
   const { durations, source: durationSource } = resolveSegmentDurations();
   const segmentTimings = buildSegmentTimings(durations, durationSource);
@@ -351,12 +279,12 @@ async function main(): Promise<void> {
     );
   });
 
-  const welcomeDuration = probeDurationSeconds(welcomeInWork);
+  const presenterDuration = probeDurationSeconds(presenterDest);
   const slidesSum = durations.reduce((sum, value) => sum + value, 0);
-  const delta = Math.abs(welcomeDuration - slidesSum);
+  const delta = Math.abs(presenterDuration - slidesSum);
 
   console.log("");
-  console.log(`tempo-welcome.mp4 duration: ${welcomeDuration.toFixed(3)}s`);
+  console.log(`presenter duration:         ${presenterDuration.toFixed(3)}s`);
   console.log(`Sum of segment durations:   ${slidesSum.toFixed(3)}s`);
   console.log(`Delta:                      ${delta.toFixed(3)}s`);
 
@@ -368,13 +296,13 @@ async function main(): Promise<void> {
   }
 
   console.log("");
-  console.log("PART 2: Building slides-track.mp4 ...");
+  console.log("Building slides-track.mp4 (left half) ...");
   const slidesTrackPath = buildSlidesTrack(slidesInWork, durations);
 
   const slidesTrackDuration = probeDurationSeconds(slidesTrackPath);
-  const slidesTrackDelta = Math.abs(slidesTrackDuration - welcomeDuration);
+  const slidesTrackDelta = Math.abs(slidesTrackDuration - presenterDuration);
   console.log(`slides-track.mp4 duration: ${slidesTrackDuration.toFixed(3)}s`);
-  console.log(`tempo-welcome.mp4 duration: ${welcomeDuration.toFixed(3)}s`);
+  console.log(`presenter duration:        ${presenterDuration.toFixed(3)}s`);
   console.log(`slides-track delta:        ${slidesTrackDelta.toFixed(3)}s`);
 
   if (slidesTrackDelta > DURATION_TOLERANCE_SEC) {
@@ -383,24 +311,16 @@ async function main(): Promise<void> {
     );
   }
 
-  const { hex: accentHex, flaggedFallback } = readDeckAccentColor();
-  const borderColor = ffmpegColor(accentHex);
-  if (flaggedFallback) {
-    console.warn("Border color fallback in use — verify visually.");
-  } else {
-    console.log(`PiP border color (deck accent): ${accentHex}`);
-  }
-
   const outputPath = join(WORK_DIR, OUTPUT_NAME);
-  const padTotal = PIP_BORDER_PX * 2;
 
   console.log("");
-  console.log("PART 3: Compositing picture-in-picture preview ...");
+  console.log("Compositing 50/50 split (slides left, presenter right) ...");
 
   const filterComplex =
-    `[1:v]scale=-2:${PIP_HEIGHT_PX}[pip];` +
-    `[pip]pad=iw+${padTotal}:ih+${padTotal}:${PIP_BORDER_PX}:${PIP_BORDER_PX}:color=${borderColor}[pipborder];` +
-    `[0:v][pipborder]overlay=W-w-${PIP_MARGIN_PX}:H-h-${PIP_MARGIN_PX}[out]`;
+    `[0:v]scale=${HALF_WIDTH}:${FRAME_HEIGHT},setsar=1[left];` +
+    `[1:v]scale=${HALF_WIDTH}:${FRAME_HEIGHT}:force_original_aspect_ratio=increase,` +
+    `crop=${HALF_WIDTH}:${FRAME_HEIGHT}:(iw-${HALF_WIDTH})/2:(ih-${FRAME_HEIGHT})/2,setsar=1[right];` +
+    `[left][right]hstack=inputs=2[out]`;
 
   try {
     runFfmpeg([
@@ -408,7 +328,7 @@ async function main(): Promise<void> {
       "-i",
       slidesTrackPath,
       "-i",
-      welcomeInWork,
+      presenterDest,
       "-filter_complex",
       filterComplex,
       "-map",
@@ -436,7 +356,7 @@ async function main(): Promise<void> {
       "-i",
       slidesTrackPath,
       "-i",
-      welcomeInWork,
+      presenterDest,
       "-filter_complex",
       filterComplex,
       "-map",
@@ -469,10 +389,8 @@ async function main(): Promise<void> {
   console.log("=".repeat(72));
   console.log("COMPOSITE PREVIEW SUMMARY");
   console.log("=".repeat(72));
-  console.log(`tempo-welcome.mp4: ${welcomeResolved.source}`);
-  SLIDE_FILE_NAMES.forEach((name, index) => {
-    console.log(`${name}: ${slideResolutions[index].source}`);
-  });
+  console.log(`Layout: slides left ${HALF_WIDTH}px, presenter right ${HALF_WIDTH}px (${FRAME_WIDTH}x${FRAME_HEIGHT})`);
+  console.log(`Presenter source: ${presenterSource}`);
   console.log(`Durations: ${durationSource === "measured" ? "measured via ffprobe on local segments" : "DOCUMENTED FALLBACK — verify by eye"}`);
   segmentTimings.forEach((timing) => {
     console.log(
@@ -486,8 +404,6 @@ async function main(): Promise<void> {
   ffmpegCommands.forEach((command, index) => {
     console.log(`  ${index + 1}. ${command}`);
   });
-
-  reportPipOverlapRisk();
 }
 
 main().catch((error: unknown) => {
