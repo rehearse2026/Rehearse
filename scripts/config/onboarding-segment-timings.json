@@ -1,0 +1,37 @@
+{
+  "measuredAt": "2026-08-29",
+  "source": "caption-alignment",
+  "totalDurationSec": 75.97,
+  "segments": [
+    {
+      "key": "welcome",
+      "startsAt": 0,
+      "duration": 14.38,
+      "confidence": "exact"
+    },
+    {
+      "key": "product",
+      "startsAt": 14.38,
+      "duration": 18.93,
+      "confidence": "fuzzy"
+    },
+    {
+      "key": "assignment",
+      "startsAt": 33.31,
+      "duration": 12.22,
+      "confidence": "fuzzy"
+    },
+    {
+      "key": "stages",
+      "startsAt": 45.53,
+      "duration": 16.95,
+      "confidence": "exact"
+    },
+    {
+      "key": "ready",
+      "startsAt": 62.48,
+      "duration": 13.49,
+      "confidence": "exact"
+    }
+  ]
+}

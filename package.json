@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "composite:onboarding-pip": "npx tsx scripts/composite-onboarding-pip.ts"
+    "composite:onboarding-pip": "npx tsx scripts/composite-onboarding-pip.ts",
+    "generate:onboarding-video": "npx tsx scripts/generate-onboarding-video.ts"
   },
   "dependencies": {
     "@anam-ai/js-sdk": "^4.26.0",

@@ -4,7 +4,7 @@
  * No HeyGen API calls. Supabase upload is handled separately after local preview review.
  */
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { execFileSync, spawnSync } from "child_process";
 import { join } from "path";
 import ffmpegPath from "ffmpeg-static";
@@ -36,6 +36,8 @@ const HALF_WIDTH = FRAME_WIDTH / 2;
 
 const WORK_DIR = join(process.cwd(), "build", "onboarding-pip-work");
 const PRESENTER_NAME = "presenter-heygen.mp4";
+const PRESENTER_V2_NAME = "presenter-heygen-v2.mp4";
+const TIMINGS_JSON_PATH = join(process.cwd(), "scripts/config/onboarding-segment-timings.json");
 const SLIDES_TRACK_NAME = "slides-track.mp4";
 const OUTPUT_NAME = "onboarding-pip-preview.mp4";
 
@@ -46,7 +48,7 @@ type SegmentTiming = {
   slideFileName: string;
   startSec: number;
   durationSec: number;
-  source: "measured" | "documented";
+  source: "timings-json" | "measured" | "documented";
 };
 
 const ffmpegCommands: string[] = [];
@@ -90,10 +92,41 @@ function runFfmpeg(args: string[]): void {
 }
 
 /**
+ * Loads segment durations from onboarding-segment-timings.json when present.
+ */
+function loadTimingsFromJson(): { durations: number[]; source: "timings-json" } | null {
+  if (!existsSync(TIMINGS_JSON_PATH)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(TIMINGS_JSON_PATH, "utf8")) as {
+      segments?: Array<{ duration: number }>;
+    };
+    if (!parsed.segments || parsed.segments.length !== SLIDE_FILE_NAMES.length) {
+      return null;
+    }
+
+    return {
+      durations: parsed.segments.map((segment) => segment.duration),
+      source: "timings-json",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Searches candidate directories for a presenter-only HeyGen MP4 (not the composited upload).
  */
 function findPresenterVideo(): string | null {
+  const envPresenter = process.env.ONBOARDING_PRESENTER_VIDEO;
+  if (envPresenter && existsSync(envPresenter)) {
+    return envPresenter;
+  }
+
   const candidates = [
+    join(WORK_DIR, PRESENTER_V2_NAME),
     join(WORK_DIR, PRESENTER_NAME),
     join(WORK_DIR, "tempo-welcome.mp4"),
     "/tmp/tempo-welcome.mp4",
@@ -110,12 +143,18 @@ function findPresenterVideo(): string | null {
 }
 
 /**
- * Builds segment durations from local segment MP4s or documented fallback values.
+ * Builds segment durations from timings JSON, local segment MP4s, or documented fallback.
  */
 function resolveSegmentDurations(): {
   durations: number[];
-  source: "measured" | "documented";
+  source: "timings-json" | "measured" | "documented";
 } {
+  const fromJson = loadTimingsFromJson();
+  if (fromJson) {
+    console.log(`Using slide boundaries from ${TIMINGS_JSON_PATH}`);
+    return fromJson;
+  }
+
   const measured: number[] = [];
 
   for (const segmentName of SEGMENT_FILE_NAMES) {
@@ -229,7 +268,10 @@ function buildSlidesTrack(slidePaths: string[], durations: number[]): string {
 /**
  * Builds cumulative slide timing table for reporting.
  */
-function buildSegmentTimings(durations: number[], source: "measured" | "documented"): SegmentTiming[] {
+function buildSegmentTimings(
+  durations: number[],
+  source: "timings-json" | "measured" | "documented"
+): SegmentTiming[] {
   let startSec = 0;
   return durations.map((durationSec, index) => {
     const timing: SegmentTiming = {
@@ -253,17 +295,13 @@ async function main(): Promise<void> {
   const presenterSource = findPresenterVideo();
   if (!presenterSource) {
     throw new Error(
-      `Missing presenter-only HeyGen MP4. Place it at ${join(WORK_DIR, PRESENTER_NAME)} ` +
-        "or /tmp/tempo-welcome.mp4 (original talking-head file, not the composited upload)."
+      `Missing presenter-only HeyGen MP4. Place v2 at ${join(WORK_DIR, PRESENTER_V2_NAME)}, ` +
+        `v1 at ${join(WORK_DIR, PRESENTER_NAME)}, or set ONBOARDING_PRESENTER_VIDEO.`
     );
   }
 
-  const presenterDest = join(WORK_DIR, PRESENTER_NAME);
-  if (presenterSource !== presenterDest) {
-    copyFileSync(presenterSource, presenterDest);
-  }
-
-  console.log(`presenter video: local → ${presenterSource}`);
+  const presenterInWork = presenterSource;
+  console.log(`presenter video: ${presenterSource}`);
 
   console.log("Rendering slide PNGs from config ...");
   const slidesInWork = await renderSlidesToWorkDir();
@@ -279,7 +317,7 @@ async function main(): Promise<void> {
     );
   });
 
-  const presenterDuration = probeDurationSeconds(presenterDest);
+  const presenterDuration = probeDurationSeconds(presenterInWork);
   const slidesSum = durations.reduce((sum, value) => sum + value, 0);
   const delta = Math.abs(presenterDuration - slidesSum);
 
@@ -328,7 +366,7 @@ async function main(): Promise<void> {
       "-i",
       slidesTrackPath,
       "-i",
-      presenterDest,
+      presenterInWork,
       "-filter_complex",
       filterComplex,
       "-map",
@@ -356,7 +394,7 @@ async function main(): Promise<void> {
       "-i",
       slidesTrackPath,
       "-i",
-      presenterDest,
+      presenterInWork,
       "-filter_complex",
       filterComplex,
       "-map",
@@ -391,7 +429,7 @@ async function main(): Promise<void> {
   console.log("=".repeat(72));
   console.log(`Layout: slides left ${HALF_WIDTH}px, presenter right ${HALF_WIDTH}px (${FRAME_WIDTH}x${FRAME_HEIGHT})`);
   console.log(`Presenter source: ${presenterSource}`);
-  console.log(`Durations: ${durationSource === "measured" ? "measured via ffprobe on local segments" : "DOCUMENTED FALLBACK — verify by eye"}`);
+  console.log(`Durations: ${durationSource}`);
   segmentTimings.forEach((timing) => {
     console.log(
       `  Slide ${timing.index}: start ${timing.startSec.toFixed(3)}s, duration ${timing.durationSec.toFixed(3)}s (${timing.slideFileName})`
