@@ -10,13 +10,151 @@ import { createPortal } from "react-dom";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { TEMPO_ONBOARDING_VIDEO_URL } from "@/lib/tempo-onboarding-video";
 
+const CENTER_CONTROL_HIDE_MS = 900;
+
+type OnboardingVideoPlayerProps = {
+  autoPlay?: boolean;
+  className?: string;
+};
+
+/**
+ * Custom onboarding player — center play/pause overlay (auto-hides while playing), no native controls.
+ */
+function OnboardingVideoPlayer({
+  autoPlay = false,
+  className,
+}: OnboardingVideoPlayerProps): React.ReactElement {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hideOverlayTimerRef = useRef<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showCenterControl, setShowCenterControl] = useState(true);
+
+  const clearHideTimer = useCallback((): void => {
+    if (hideOverlayTimerRef.current !== null) {
+      window.clearTimeout(hideOverlayTimerRef.current);
+      hideOverlayTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHideCenterControl = useCallback((): void => {
+    clearHideTimer();
+    hideOverlayTimerRef.current = window.setTimeout(() => {
+      setShowCenterControl(false);
+    }, CENTER_CONTROL_HIDE_MS);
+  }, [clearHideTimer]);
+
+  const togglePlay = useCallback(async (): Promise<void> => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+    if (video.paused) {
+      await video.play();
+    } else {
+      video.pause();
+    }
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    const onPlay = (): void => {
+      setIsPlaying(true);
+      scheduleHideCenterControl();
+    };
+    const onPause = (): void => {
+      setIsPlaying(false);
+      clearHideTimer();
+      setShowCenterControl(true);
+    };
+    const onEnded = (): void => {
+      setIsPlaying(false);
+      clearHideTimer();
+      setShowCenterControl(true);
+    };
+
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
+
+    return () => {
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
+      clearHideTimer();
+    };
+  }, [clearHideTimer, scheduleHideCenterControl]);
+
+  useEffect(() => {
+    if (!autoPlay || !videoRef.current) {
+      return;
+    }
+    void videoRef.current.play().catch(() => {
+      setShowCenterControl(true);
+    });
+  }, [autoPlay]);
+
+  return (
+    <div
+      className={`relative h-full w-full ${className ?? ""}`}
+      onMouseEnter={() => {
+        if (isPlaying) {
+          setShowCenterControl(true);
+        }
+      }}
+      onMouseLeave={() => {
+        if (isPlaying) {
+          scheduleHideCenterControl();
+        }
+      }}
+    >
+      <video
+        ref={videoRef}
+        src={TEMPO_ONBOARDING_VIDEO_URL}
+        playsInline
+        preload="metadata"
+        disablePictureInPicture
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        className="h-full w-full object-contain cursor-pointer bg-black"
+        onClick={() => {
+          void togglePlay();
+        }}
+      >
+        <track kind="captions" />
+      </video>
+
+      <button
+        type="button"
+        aria-label={isPlaying ? "Pause video" : "Play video"}
+        onClick={(event) => {
+          event.stopPropagation();
+          void togglePlay();
+        }}
+        className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
+          showCenterControl ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <span className="flex h-16 w-16 items-center justify-center rounded-full border border-white/25 bg-black/55 backdrop-blur-sm shadow-lg">
+          <MaterialIcon
+            name={isPlaying ? "pause" : "play_arrow"}
+            className="text-[36px] text-white"
+          />
+        </span>
+      </button>
+    </div>
+  );
+}
+
 type TempoOnboardingVideoModalProps = {
   isOpen: boolean;
   onClose: () => void;
 };
 
 /**
- * Full-screen modal with HTML5 video, Skip, and Close controls.
+ * Full-screen modal with custom video player, Skip, and Close controls.
  */
 export function TempoOnboardingVideoModal({
   isOpen,
@@ -24,7 +162,6 @@ export function TempoOnboardingVideoModal({
 }: TempoOnboardingVideoModalProps): React.ReactElement | null {
   const [isMounted, setIsMounted] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -50,15 +187,6 @@ export function TempoOnboardingVideoModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, requestClose]);
-
-  useEffect(() => {
-    if (!isOpen || !videoRef.current) {
-      return;
-    }
-    void videoRef.current.play().catch(() => {
-      /* autoplay may be blocked until user interacts */
-    });
-  }, [isOpen]);
 
   if (!isMounted || !isOpen) {
     return null;
@@ -101,17 +229,8 @@ export function TempoOnboardingVideoModal({
           </button>
         </div>
 
-        <div className="bg-black aspect-video">
-          <video
-            ref={videoRef}
-            key={TEMPO_ONBOARDING_VIDEO_URL}
-            src={TEMPO_ONBOARDING_VIDEO_URL}
-            controls
-            playsInline
-            className="h-full w-full object-contain"
-          >
-            <track kind="captions" />
-          </video>
+        <div className="aspect-video bg-black">
+          <OnboardingVideoPlayer autoPlay />
         </div>
 
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-white/10">
@@ -139,15 +258,7 @@ export function TempoOnboardingVideoInline(): React.ReactElement {
         Onboarding Briefing
       </div>
       <div className="rounded-xl border border-white/10 overflow-hidden bg-black shadow-2xl aspect-video">
-        <video
-          src={TEMPO_ONBOARDING_VIDEO_URL}
-          controls
-          playsInline
-          preload="metadata"
-          className="h-full w-full object-contain"
-        >
-          <track kind="captions" />
-        </video>
+        <OnboardingVideoPlayer />
       </div>
     </div>
   );
