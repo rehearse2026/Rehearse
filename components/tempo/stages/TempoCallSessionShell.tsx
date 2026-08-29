@@ -74,35 +74,36 @@ export function TempoCallSessionShell({
             </div>
           )}
 
-          {connected && (
-            <>
-              <div className="absolute bottom-6 left-6 glass-panel px-4 py-2 rounded-xl flex flex-col z-10">
-                <span className="text-white font-bold text-title-lg">{personaName}</span>
-                <span className="text-white/60 text-body-md">{personaRole}</span>
+          {/* PiP — keep <video> mounted during connect so lobby streams attach immediately */}
+          <div
+            className={`absolute bottom-6 right-6 w-48 aspect-video rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-neutral-800 z-10 transition-opacity duration-300 ${
+              connected ? "opacity-100" : "opacity-0 pointer-events-none"
+            } ${isStudentSpeaking ? "speaking-ring-blue" : ""}`}
+          >
+            <video
+              ref={studentVideoRef as React.LegacyRef<HTMLVideoElement>}
+              autoPlay
+              playsInline
+              muted
+              className={`w-full h-full object-cover scale-x-[-1] ${showCameraPreview ? "" : "hidden"}`}
+            />
+            {connected && !showCameraPreview && (
+              <div className="absolute inset-0 flex items-center justify-center bg-neutral-700">
+                <MaterialIcon name="person" className="text-white/40 text-4xl" />
               </div>
+            )}
+            {connected && (
+              <div className="absolute bottom-2 left-2 text-[10px] text-white/80 bg-black/40 px-2 py-0.5 rounded uppercase tracking-tighter">
+                You (Student)
+              </div>
+            )}
+          </div>
 
-              <div
-                className={`absolute bottom-6 right-6 w-48 aspect-video rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl bg-neutral-800 z-10 ${
-                  isStudentSpeaking ? "speaking-ring-blue" : ""
-                }`}
-              >
-                <video
-                  ref={studentVideoRef as React.LegacyRef<HTMLVideoElement>}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`w-full h-full object-cover scale-x-[-1] ${showCameraPreview ? "" : "hidden"}`}
-                />
-                {!showCameraPreview && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-neutral-700">
-                    <MaterialIcon name="person" className="text-white/40 text-4xl" />
-                  </div>
-                )}
-                <div className="absolute bottom-2 left-2 text-[10px] text-white/80 bg-black/40 px-2 py-0.5 rounded uppercase tracking-tighter">
-                  You (Student)
-                </div>
-              </div>
-            </>
+          {connected && (
+            <div className="absolute bottom-6 left-6 glass-panel px-4 py-2 rounded-xl flex flex-col z-10">
+              <span className="text-white font-bold text-title-lg">{personaName}</span>
+              <span className="text-white/60 text-body-md">{personaRole}</span>
+            </div>
           )}
         </div>
       </div>

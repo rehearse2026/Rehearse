@@ -10,7 +10,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { TempoCallSessionShell } from "@/components/tempo/stages/TempoCallSessionShell";
 import {
@@ -123,13 +123,24 @@ export function DiscoveryCallSession({
     void el.play().catch(() => undefined);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeVideoStreamRef.current = videoStream;
     if (videoStream && hasLiveVideoTrack(videoStream)) {
       setCameraOff(false);
     }
     attachVideoPreview(hasLiveVideoTrack(videoStream) ? videoStream : null);
   }, [videoStream, attachVideoPreview]);
+
+  // Re-attach when call connects (safety net after connecting overlay clears).
+  useLayoutEffect(() => {
+    if (!connected || cameraOff) {
+      return;
+    }
+    const stream = activeVideoStreamRef.current;
+    if (stream && hasLiveVideoTrack(stream)) {
+      attachVideoPreview(stream);
+    }
+  }, [connected, cameraOff, attachVideoPreview]);
 
   const stopVideoTracks = useCallback((): void => {
     activeVideoStreamRef.current?.getVideoTracks().forEach((track) => track.stop());
