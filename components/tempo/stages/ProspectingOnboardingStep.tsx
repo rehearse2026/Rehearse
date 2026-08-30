@@ -58,7 +58,7 @@ export function ProspectingOnboardingStep({
   }, [onboardingComplete, onOnboardingComplete]);
 
   return (
-    <div className="bg-surface text-on-surface font-body-md min-h-full flex items-center justify-center p-md">
+    <div className="bg-surface text-on-surface font-body-md min-h-full flex items-center justify-center px-md pt-lg pb-md">
       <main className="w-full max-w-[800px] mx-auto space-y-lg">
         <header className="flex flex-col gap-sm">
           <h1 className="font-headline-lg text-headline-lg text-primary">Welcome Briefing</h1>

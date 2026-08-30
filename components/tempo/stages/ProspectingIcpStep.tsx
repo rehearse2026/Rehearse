@@ -5,7 +5,6 @@
 
 "use client";
 
-import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import {
   parseIcpLocationCount,
   type ProspectingWizardState,
@@ -39,7 +38,7 @@ export function ProspectingIcpStep({
     (minLoc === null || maxLoc === null || maxLoc < minLoc);
 
   return (
-    <div className="bg-surface text-on-surface font-body-md min-h-full flex items-start justify-center p-md">
+    <div className="bg-surface text-on-surface font-body-md min-h-full flex items-start justify-center px-md pt-lg pb-md">
       <main className="w-full max-w-[800px] mx-auto space-y-xl">
         <h1 className="font-headline-lg text-headline-lg text-primary">Ideal Customer Profile</h1>
 
@@ -192,26 +191,6 @@ export function ProspectingIcpStep({
             ))}
           </div>
         </section>
-
-        {state.icpTargetVerticals.trim() ? (
-          <section className="space-y-sm">
-            <div className="flex items-center gap-md">
-              <MaterialIcon name="target" className="text-secondary" />
-              <h2 className="font-label-md font-bold text-primary uppercase tracking-wider">
-                Your ICP summary
-              </h2>
-            </div>
-            <p className="font-body-md text-on-surface-variant italic">
-              &ldquo;{state.icpTargetVerticals.slice(0, 150)}
-              {state.icpTargetVerticals.length > 150 ? "..." : ""}&rdquo;
-            </p>
-            {minLoc !== null && maxLoc !== null && maxLoc >= minLoc ? (
-              <p className="font-label-sm text-on-surface-variant">
-                Size: {minLoc}-{maxLoc} locations
-              </p>
-            ) : null}
-          </section>
-        ) : null}
       </main>
     </div>
   );
