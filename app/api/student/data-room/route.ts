@@ -25,9 +25,53 @@ export type DataRoomCompany = {
   name: string;
   industry: string;
   sizeLabel: string;
+  signalHint: string;
+  vertical: string | null;
+  locations: number | null;
+  metro: string | null;
+  inTerritory: boolean | null;
+  sizeNote: string | null;
+  onlineBooking: boolean | null;
+  blurb: string | null;
+  publicSignals: string[];
   contacts: DataRoomContact[];
   documents: DataRoomDocument[];
 };
+
+function parsePublicSignals(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is string => typeof item === "string" && item.trim() !== "")
+    .map((item) => item.trim());
+}
+
+function mapDirectoryRow(row: Record<string, unknown>): Omit<DataRoomCompany, "contacts" | "documents"> {
+  const locationsRaw = row.locations;
+  const locations =
+    typeof locationsRaw === "number"
+      ? locationsRaw
+      : typeof locationsRaw === "string" && locationsRaw.trim() !== ""
+        ? Number.parseInt(locationsRaw, 10)
+        : null;
+
+  return {
+    id: String(row.id),
+    name: String(row.company_name ?? ""),
+    industry: String(row.industry ?? ""),
+    sizeLabel: String(row.size_locations ?? ""),
+    signalHint: String(row.signal_hint ?? ""),
+    vertical: typeof row.vertical === "string" ? row.vertical : null,
+    locations: Number.isFinite(locations) ? locations : null,
+    metro: typeof row.metro === "string" ? row.metro : null,
+    inTerritory: typeof row.in_territory === "boolean" ? row.in_territory : null,
+    sizeNote: typeof row.size_note === "string" ? row.size_note : null,
+    onlineBooking: typeof row.online_booking === "boolean" ? row.online_booking : null,
+    blurb: typeof row.blurb === "string" ? row.blurb : null,
+    publicSignals: parsePublicSignals(row.public_signals),
+  };
+}
 
 /**
  * GET /api/student/data-room?attemptId=…
@@ -59,7 +103,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     const simulationId = String(attempt.simulation_id);
     const { data: companies, error: companyError } = await supabase
       .from("crm_prospect_directory")
-      .select("id, company_name, industry, size_locations")
+      .select(
+        "id, company_name, industry, size_locations, signal_hint, vertical, locations, metro, in_territory, size_note, online_booking, blurb, public_signals"
+      )
       .eq("simulation_id", simulationId)
       .eq("in_data_room", true)
       .eq("is_active", true)
@@ -136,14 +182,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
 
     const payload: DataRoomCompany[] = rows.map((row) => {
-      const id = String(row.id);
+      const base = mapDirectoryRow(row as Record<string, unknown>);
       return {
-        id,
-        name: String(row.company_name ?? ""),
-        industry: String(row.industry ?? ""),
-        sizeLabel: String(row.size_locations ?? ""),
-        contacts: contactsByCompany.get(id) ?? [],
-        documents: docsByCompany.get(id) ?? [],
+        ...base,
+        contacts: contactsByCompany.get(base.id) ?? [],
+        documents: docsByCompany.get(base.id) ?? [],
       };
     });
 

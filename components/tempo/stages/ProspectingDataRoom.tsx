@@ -14,6 +14,17 @@ import type { DataRoomCompany } from "@/app/api/student/data-room/route";
 import type { CrmLead } from "@/types";
 
 type MainTab = "documents" | "assistant";
+type CompanyViewTab = "overview" | "profile" | "news";
+
+function formatVerticalLabel(vertical: string | null): string | null {
+  if (!vertical?.trim()) {
+    return null;
+  }
+  return vertical
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 type ShortlistEntry = {
   leadId: string;
@@ -47,7 +58,7 @@ export function ProspectingDataRoom({
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("documents");
-  const [docTab, setDocTab] = useState<"profile" | "news">("profile");
+  const [docTab, setDocTab] = useState<CompanyViewTab>("overview");
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([]);
   const [formCompany, setFormCompany] = useState<DataRoomCompany | null>(null);
   const [removingLeadId, setRemovingLeadId] = useState<string | null>(null);
@@ -152,10 +163,10 @@ export function ProspectingDataRoom({
   const selectedIsShortlisted = selected ? shortlistedIds.has(selected.id) : false;
 
   const activeDoc = useMemo(() => {
-    if (!selected) {
+    if (!selected || docTab === "overview") {
       return null;
     }
-    return selected.documents.find((d) => d.type === docTab) ?? selected.documents[0] ?? null;
+    return selected.documents.find((d) => d.type === docTab) ?? null;
   }, [docTab, selected]);
 
   const handleShortlistSaved = (lead: CrmLead): void => {
@@ -282,7 +293,7 @@ export function ProspectingDataRoom({
                     key={company.id}
                     type="button"
                     onClick={() => {
-                      setDocTab("profile");
+                      setDocTab("overview");
                       onSelectCompany(company.id);
                     }}
                     className={`w-full text-left p-2.5 rounded-lg cursor-pointer transition-all group active:scale-[0.99] border ${
@@ -333,10 +344,12 @@ export function ProspectingDataRoom({
                   {selected.name}
                 </h3>
                 <p className="text-body-md text-on-surface-variant mb-3">
-                  {selected.industry} · {selected.sizeLabel}
+                  {selected.industry}
+                  {selected.locations !== null ? ` · ${selected.locations} locations` : ` · ${selected.sizeLabel}`}
+                  {selected.metro ? ` · ${selected.metro}` : ""}
                 </p>
                 <div className="inline-flex rounded-lg border border-outline-variant overflow-hidden">
-                  {(["profile", "news"] as const).map((tab) => (
+                  {(["overview", "profile", "news"] as const).map((tab) => (
                     <button
                       key={tab}
                       type="button"
@@ -354,7 +367,112 @@ export function ProspectingDataRoom({
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                {activeDoc ? (
+                {docTab === "overview" ? (
+                  <div className="space-y-lg">
+                    {selected.blurb ? (
+                      <section className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                        <h4 className="font-headline-md text-headline-md text-on-surface mb-2">
+                          Overview
+                        </h4>
+                        <p className="text-body-md text-on-surface leading-relaxed">{selected.blurb}</p>
+                      </section>
+                    ) : null}
+
+                    <section className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                      <h4 className="font-headline-md text-headline-md text-on-surface mb-3">
+                        Firmographics
+                      </h4>
+                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-md text-body-md">
+                        {formatVerticalLabel(selected.vertical) ? (
+                          <div>
+                            <dt className="text-label-sm text-on-surface-variant uppercase">Vertical</dt>
+                            <dd className="text-on-surface">{formatVerticalLabel(selected.vertical)}</dd>
+                          </div>
+                        ) : null}
+                        {selected.locations !== null ? (
+                          <div>
+                            <dt className="text-label-sm text-on-surface-variant uppercase">Locations</dt>
+                            <dd className="text-on-surface">{selected.locations}</dd>
+                          </div>
+                        ) : null}
+                        {selected.metro ? (
+                          <div>
+                            <dt className="text-label-sm text-on-surface-variant uppercase">Metro</dt>
+                            <dd className="text-on-surface">{selected.metro}</dd>
+                          </div>
+                        ) : null}
+                        {selected.inTerritory !== null ? (
+                          <div>
+                            <dt className="text-label-sm text-on-surface-variant uppercase">Territory</dt>
+                            <dd className="text-on-surface">
+                              {selected.inTerritory ? "In territory" : "Out of territory"}
+                            </dd>
+                          </div>
+                        ) : null}
+                        {selected.onlineBooking !== null ? (
+                          <div>
+                            <dt className="text-label-sm text-on-surface-variant uppercase">
+                              Online booking
+                            </dt>
+                            <dd className="text-on-surface">
+                              {selected.onlineBooking ? "Yes" : "No"}
+                            </dd>
+                          </div>
+                        ) : null}
+                        {selected.sizeNote ? (
+                          <div className="sm:col-span-2">
+                            <dt className="text-label-sm text-on-surface-variant uppercase">Size note</dt>
+                            <dd className="text-on-surface">{selected.sizeNote}</dd>
+                          </div>
+                        ) : null}
+                      </dl>
+                    </section>
+
+                    {selected.publicSignals.length > 0 ? (
+                      <section className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                        <h4 className="font-headline-md text-headline-md text-on-surface mb-3">
+                          Public signals
+                        </h4>
+                        <ul className="space-y-sm">
+                          {selected.publicSignals.map((signal) => (
+                            <li
+                              key={signal}
+                              className="flex items-start gap-sm text-body-md text-on-surface"
+                            >
+                              <MaterialIcon
+                                name="radio_button_checked"
+                                className="text-secondary text-[14px] mt-1 shrink-0"
+                              />
+                              <span>{signal}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : null}
+
+                    {selected.contacts.length > 0 ? (
+                      <section className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
+                        <h4 className="font-headline-md text-headline-md text-on-surface mb-3">
+                          Known contacts
+                        </h4>
+                        <ul className="space-y-md">
+                          {selected.contacts.map((contact) => (
+                            <li
+                              key={`${contact.name}-${contact.title}`}
+                              className="border border-outline-variant/60 rounded-lg p-md"
+                            >
+                              <p className="font-label-md text-label-md text-on-surface">{contact.name}</p>
+                              <p className="text-body-md text-on-surface-variant">
+                                {contact.title}
+                                {contact.department ? ` · ${contact.department}` : ""}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : null}
+                  </div>
+                ) : activeDoc ? (
                   <article className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
                     <h4 className="font-headline-md text-headline-md text-on-surface mb-3">
                       {activeDoc.title}
@@ -408,7 +526,7 @@ export function ProspectingDataRoom({
                 </div>
                 <h3 className="font-display text-display text-primary mb-md">Open the Data Room</h3>
                 <p className="text-body-lg text-on-surface-variant leading-relaxed">
-                  Select a company to read its Profile and News documents, then shortlist the three
+                  Select a company to review its visible research card, then shortlist the three
                   accounts you want to pursue.
                 </p>
               </div>
