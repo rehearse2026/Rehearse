@@ -220,7 +220,7 @@ export function ProspectingWizard({
                     }`}
                   >
                     {state.onboardingComplete
-                      ? "Briefing complete — you can continue"
+                      ? "Briefing complete, you can continue"
                       : "Watch the briefing to unlock Next"}
                   </span>
                 ) : null}
