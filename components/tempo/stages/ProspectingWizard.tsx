@@ -272,7 +272,11 @@ export function ProspectingWizard({
 
           <div
             className={`flex-1 min-h-0 overflow-y-auto ${
-              currentStep === 1 || currentStep === 2 ? "p-2 lg:p-3" : "p-4 lg:p-xl"
+              currentStep === 0 || currentStep === 1
+                ? "p-0"
+                : currentStep === 2
+                  ? "p-2 lg:p-3"
+                  : "p-4 lg:p-xl"
             }`}
           >
             <ProspectingStepPanels
