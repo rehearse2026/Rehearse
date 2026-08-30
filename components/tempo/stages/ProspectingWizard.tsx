@@ -16,6 +16,7 @@ import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import { ProspectingStepPanels } from "@/components/tempo/stages/ProspectingStepPanels";
 import { useProspectingWizard } from "@/hooks/useProspectingWizard";
 import {
+  isIcpDefinitionComplete,
   PROSPECTING_STEPS,
   TEMPO_HANDOFF_MESSAGES,
   TEMPO_HANDOFF_STAGE_META,
@@ -52,7 +53,7 @@ export function ProspectingWizard({
   const { currentStep } = state;
   const prospectingMeta = TEMPO_HANDOFF_STAGE_META.prospecting;
   const discoveryMeta = TEMPO_HANDOFF_STAGE_META.discovery;
-  const icpComplete = wizard.icpState?.feedbackSeen === true || state.icpGateComplete;
+  const icpComplete = isIcpDefinitionComplete(state);
   const showProspectingHandoff =
     !wizard.isLoading &&
     !postSubmitHandoff &&
@@ -152,7 +153,7 @@ export function ProspectingWizard({
                       {isCompleted ? (
                         <MaterialIcon name="check" className="text-[14px]" />
                       ) : (
-                        index + 1
+                        index
                       )}
                     </div>
                     {index < PROSPECTING_STEPS.length - 1 && (
@@ -285,8 +286,6 @@ export function ProspectingWizard({
               onLeadSelected={(leadId) => wizard.completeLeadSelection(leadId)}
               onResearchContinue={() => void handleNext()}
               canResearchContinue={wizard.canProceed}
-              icpState={wizard.icpState}
-              onIcpComplete={wizard.completeIcpGate}
               onOnboardingComplete={wizard.completeOnboarding}
             />
           </div>

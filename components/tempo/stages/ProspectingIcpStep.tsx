@@ -1,184 +1,113 @@
 /**
  * ProspectingIcpStep.tsx
- * Pre-wizard "Define Your Ideal Customer" gate for Tempo Prospecting.
- * Form layout matches the Stitch HTML reference; feedback uses ManagerFeedbackCard.
+ * ICP definition step — two separate fields (ideal customer + pursuit signals).
  */
 
 "use client";
 
-import { useState } from "react";
-import { ManagerFeedbackCard } from "@/components/tempo/ManagerFeedbackCard";
-import type { IcpCheckResult, ProspectingIcpState } from "@/lib/tempo-icp-criteria";
+import { MaterialIcon } from "@/components/ui/MaterialIcon";
+
+const ICP_FIELD_MIN_LENGTH = 10;
+const ICP_FIELD_MAX_LENGTH = 500;
+
+import {
+  OPENING_MESSAGE_TIPS,
+  type ProspectingWizardState,
+} from "@/lib/tempo-prospecting";
 
 type ProspectingIcpStepProps = {
   attemptId: string;
-  /** Restored mid-feedback state after a prior submit (feedbackSeen still false). */
-  initialIcp: ProspectingIcpState | null;
-  onComplete: (icp: ProspectingIcpState) => void;
-};
-
-type FeedbackView = {
-  result: IcpCheckResult;
-  displayText: string;
-  activeIcpText: string;
-  originalText: string;
+  icpField1: string;
+  icpField2: string;
+  onFieldChange: <K extends keyof ProspectingWizardState>(
+    key: K,
+    value: ProspectingWizardState[K]
+  ) => void;
 };
 
 /**
- * ICP form + non-blocking manager feedback continue gate.
+ * Two-field ICP form persisted on the wizard draft.
  */
 export function ProspectingIcpStep({
-  attemptId,
-  initialIcp,
-  onComplete,
+  attemptId: _attemptId,
+  icpField1,
+  icpField2,
+  onFieldChange,
 }: ProspectingIcpStepProps): React.ReactElement {
-  const [icpText, setIcpText] = useState(initialIcp?.originalText ?? "");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [feedback, setFeedback] = useState<FeedbackView | null>(() => {
-    if (initialIcp && !initialIcp.feedbackSeen) {
-      return {
-        result: initialIcp.result,
-        displayText: initialIcp.displayText,
-        activeIcpText: initialIcp.activeIcpText,
-        originalText: initialIcp.originalText,
-      };
-    }
-    return null;
-  });
-
-  const handleSubmit = async (): Promise<void> => {
-    const trimmed = icpText.trim();
-    if (!trimmed || isSubmitting) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError("");
-    try {
-      const res = await fetch("/api/student/icp-check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attemptId, icpText: trimmed }),
-      });
-
-      if (!res.ok) {
-        throw new Error("ICP check failed");
-      }
-
-      const body = (await res.json()) as {
-        result: IcpCheckResult;
-        displayText: string;
-        activeIcpText: string;
-      };
-
-      setFeedback({
-        result: body.result,
-        displayText: body.displayText,
-        activeIcpText: body.activeIcpText,
-        originalText: trimmed,
-      });
-    } catch {
-      setError("Could not check your ICP right now. Try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleContinue = async (): Promise<void> => {
-    if (!feedback) {
-      return;
-    }
-
-    const next: ProspectingIcpState = {
-      originalText: feedback.originalText,
-      result: feedback.result,
-      displayText: feedback.displayText,
-      activeIcpText: feedback.activeIcpText,
-      feedbackSeen: true,
-    };
-
-    try {
-      await fetch("/api/student/icp-check", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ attemptId, feedbackSeen: true }),
-      });
-    } catch {
-      /* local continue still unlocks the wizard */
-    }
-
-    onComplete(next);
-  };
-
-  if (feedback) {
-    return (
-      <div className="bg-surface text-on-surface font-body-md min-h-full flex items-center justify-center p-gutter">
-        <ManagerFeedbackCard
-          variant={feedback.result}
-          text={feedback.displayText}
-          onContinue={() => void handleContinue()}
-        />
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-surface text-on-surface font-body-md min-h-full flex items-center justify-center p-gutter">
-      <main className="w-full max-w-[800px] mx-auto">
-        <article className="bg-surface-container-lowest border border-outline-variant rounded-lg shadow-sm overflow-hidden flex flex-col">
-          <header className="px-gutter pt-gutter pb-md border-b border-outline-variant/30 flex flex-col gap-sm">
-            <h1 className="font-headline-lg text-headline-lg text-primary">
-              Define Your Ideal Customer
-            </h1>
-            <p className="font-body-md text-body-md text-on-surface-variant max-w-prose">
-              Before you go looking for accounts, decide what you&apos;re actually looking for. Who
-              is Tempo&apos;s ideal customer, and why?
+    <div className="bg-surface text-on-surface font-body-md min-h-full p-gutter">
+      <main className="w-full max-w-3xl mx-auto space-y-xl">
+        <div className="space-y-sm">
+          <h1 className="font-headline-lg text-headline-lg text-primary">Ideal Customer Profile</h1>
+          <p className="font-body-md text-body-md text-on-surface-variant">
+            Defining your ICP is the foundation of every successful sales campaign. Be as specific
+            as possible about the organizations and personas that derive the most value from your
+            solution.
+          </p>
+        </div>
+
+        <div className="bg-secondary-fixed text-on-secondary-fixed p-md rounded-lg flex gap-md items-start shadow-sm border border-secondary-container/20">
+          <MaterialIcon name="lightbulb" className="text-secondary font-bold shrink-0" />
+          <div className="space-y-xs">
+            <h2 className="font-bold text-label-md">Rehearse Tip</h2>
+            <p className="text-label-md leading-relaxed opacity-90">
+              Focus on pain points rather than demographics. A customer&apos;s industry matters less
+              than the specific problem they are trying to solve right now.
             </p>
-          </header>
+          </div>
+        </div>
 
-          <section className="p-gutter flex-1 flex flex-col gap-lg">
-            <div className="flex flex-col gap-sm">
-              <label
-                className="font-label-md text-label-md text-on-surface flex items-center justify-between"
-                htmlFor="icp-textarea"
-              >
-                Your ICP
-                <span className="text-on-surface-variant font-normal">Required</span>
+        <div className="space-y-lg">
+          <div className="space-y-sm">
+            <div className="flex justify-between items-center">
+              <label className="font-bold text-label-md text-on-surface" htmlFor="icp-field-1">
+                Who is Tempo&apos;s ideal customer?
               </label>
-              <textarea
-                id="icp-textarea"
-                rows={8}
-                value={icpText}
-                onChange={(e) => setIcpText(e.target.value)}
-                placeholder="e.g., Multi-location appointment-based businesses that are still scheduling manually and showing signs of real operational strain as they grow..."
-                className="w-full px-md py-sm bg-surface-container-lowest border border-outline-variant rounded focus:ring-2 focus:ring-secondary focus:border-secondary transition-all font-body-md text-body-md text-on-surface placeholder:text-outline resize-y min-h-[160px]"
-              />
-              <p className="font-label-sm text-label-sm text-on-surface-variant mt-xs">
-                Describe the kind of business Tempo should be targeting — industry, size, current
-                situation, what makes them a strong fit right now.
-              </p>
-              {error ? (
-                <p className="font-label-sm text-label-sm text-error mt-xs">{error}</p>
-              ) : null}
+              <span className="text-[11px] text-on-surface-variant font-medium">
+                {icpField1.length} / {ICP_FIELD_MAX_LENGTH} characters
+              </span>
             </div>
-          </section>
+            <textarea
+              id="icp-field-1"
+              rows={5}
+              maxLength={ICP_FIELD_MAX_LENGTH}
+              className="w-full p-md bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary-container focus:border-secondary focus:outline-none transition-all placeholder:text-outline-variant font-body-md resize-y min-h-[128px]"
+              placeholder="Example: Appointment-based businesses with 2-20 locations..."
+              value={icpField1}
+              onChange={(e) => onFieldChange("icpField1", e.target.value)}
+            />
+            {icpField1.trim().length > 0 && icpField1.trim().length < ICP_FIELD_MIN_LENGTH ? (
+              <p className="text-label-sm text-on-surface-variant">
+                Add at least {ICP_FIELD_MIN_LENGTH} characters to continue.
+              </p>
+            ) : null}
+          </div>
 
-          <footer className="px-gutter py-md border-t border-outline-variant/30 bg-surface-container-low/50 flex justify-end">
-            <button
-              type="button"
-              disabled={!icpText.trim() || isSubmitting}
-              onClick={() => void handleSubmit()}
-              className={`h-[40px] px-lg font-label-md text-label-md rounded flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-container transition-colors ${
-                icpText.trim() && !isSubmitting
-                  ? "bg-primary-container text-on-primary hover:bg-primary cursor-pointer"
-                  : "bg-surface-container-highest text-on-surface-variant/40 cursor-not-allowed"
-              }`}
-            >
-              {isSubmitting ? "Checking…" : "Submit ICP"}
-            </button>
-          </footer>
-        </article>
+          <div className="space-y-sm">
+            <div className="flex justify-between items-center">
+              <label className="font-bold text-label-md text-on-surface" htmlFor="icp-field-2">
+                What signals tell you a prospect is worth pursuing?
+              </label>
+              <span className="text-[11px] text-on-surface-variant font-medium">
+                {icpField2.length} / {ICP_FIELD_MAX_LENGTH} characters
+              </span>
+            </div>
+            <textarea
+              id="icp-field-2"
+              rows={5}
+              maxLength={ICP_FIELD_MAX_LENGTH}
+              className="w-full p-md bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary-container focus:border-secondary focus:outline-none transition-all placeholder:text-outline-variant font-body-md resize-y min-h-[128px]"
+              placeholder="Example: Recent expansion, job listings for front desk staff..."
+              value={icpField2}
+              onChange={(e) => onFieldChange("icpField2", e.target.value)}
+            />
+            {icpField2.trim().length > 0 && icpField2.trim().length < ICP_FIELD_MIN_LENGTH ? (
+              <p className="text-label-sm text-on-surface-variant">
+                Add at least {ICP_FIELD_MIN_LENGTH} characters to continue.
+              </p>
+            ) : null}
+          </div>
+        </div>
       </main>
     </div>
   );

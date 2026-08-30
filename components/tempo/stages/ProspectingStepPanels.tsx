@@ -12,7 +12,6 @@ import { ProspectingDataRoom } from "@/components/tempo/stages/ProspectingDataRo
 import { ProspectingIcpStep } from "@/components/tempo/stages/ProspectingIcpStep";
 import { ProspectingLeadSelectionStep } from "@/components/tempo/stages/ProspectingLeadSelectionStep";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
-import type { ProspectingIcpState } from "@/lib/tempo-icp-criteria";
 import {
   OPENING_MESSAGE_TIPS,
   type ProspectingWizardState,
@@ -32,8 +31,6 @@ type StepPanelsProps = {
   onLeadSelected: (leadId: string) => Promise<void>;
   onResearchContinue?: () => void;
   canResearchContinue?: boolean;
-  icpState: ProspectingIcpState | null;
-  onIcpComplete: (icp: ProspectingIcpState) => void;
   onOnboardingComplete: () => void;
 };
 
@@ -51,8 +48,6 @@ export function ProspectingStepPanels({
   onLeadSelected,
   onResearchContinue,
   canResearchContinue = false,
-  icpState,
-  onIcpComplete,
   onOnboardingComplete,
 }: StepPanelsProps): React.ReactElement {
   if (currentStep === 0) {
@@ -69,8 +64,9 @@ export function ProspectingStepPanels({
     return (
       <ProspectingIcpStep
         attemptId={attemptId}
-        initialIcp={icpState}
-        onComplete={onIcpComplete}
+        icpField1={state.icpField1}
+        icpField2={state.icpField2}
+        onFieldChange={onFieldChange}
       />
     );
   }

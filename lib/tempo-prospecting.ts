@@ -153,6 +153,8 @@ export const OPENING_MESSAGE_TIPS = SELF_CHECK_ITEMS.map((item) => item.label);
 
 export type ProspectingWizardState = {
   currentStep: number;
+  icpField1: string;
+  icpField2: string;
   /** @deprecated Prefer companyChats; kept as flatten of active chat for older drafts. */
   chatMessages: ChatMessage[];
   /** Per-company research transcripts keyed by directory company id. */
@@ -187,6 +189,8 @@ export type ProspectingWizardState = {
 
 export const DEFAULT_PROSPECTING_WIZARD_STATE: ProspectingWizardState = {
   currentStep: 0,
+  icpField1: "",
+  icpField2: "",
   chatMessages: [],
   companyChats: {},
   selectedCompanyId: null,
@@ -271,6 +275,8 @@ export function normalizeProspectingWizardState(
   const hasRealWizardProgress =
     (typeof anyRaw.currentStep === "number" && anyRaw.currentStep > 0) ||
     (typeof anyRaw.selectedLeadId === "string" && anyRaw.selectedLeadId.trim() !== "") ||
+    (typeof anyRaw.icpField1 === "string" && anyRaw.icpField1.trim() !== "") ||
+    (typeof anyRaw.icpField2 === "string" && anyRaw.icpField2.trim() !== "") ||
     shortlistedCompanyIds.length > 0 ||
     directoryCompanyIds.length > 0 ||
     Object.keys(companyChats).length > 0 ||
@@ -308,8 +314,18 @@ export function normalizeProspectingWizardState(
   }
 
   if (!icpDone) {
-    resolvedStep = onboardingComplete ? 1 : 0;
+    const icpField1 = typeof anyRaw.icpField1 === "string" ? anyRaw.icpField1 : "";
+    const icpField2 = typeof anyRaw.icpField2 === "string" ? anyRaw.icpField2 : "";
+    const icpFieldsComplete =
+      icpField1.trim().length >= 10 && icpField2.trim().length >= 10;
+    if (!icpFieldsComplete) {
+      resolvedStep = onboardingComplete ? 1 : 0;
+    }
   }
+
+  const icpField1 = typeof anyRaw.icpField1 === "string" ? anyRaw.icpField1 : "";
+  const icpField2 = typeof anyRaw.icpField2 === "string" ? anyRaw.icpField2 : "";
+  const icpFieldsComplete = icpField1.trim().length >= 10 && icpField2.trim().length >= 10;
 
   return {
     ...DEFAULT_PROSPECTING_WIZARD_STATE,
@@ -328,6 +344,8 @@ export function normalizeProspectingWizardState(
     agentCorrections: typeof anyRaw.agentCorrections === "string" ? anyRaw.agentCorrections : "",
     prospectingHandoffSeen: Boolean(anyRaw.prospectingHandoffSeen),
     selectedLeadId,
+    icpField1,
+    icpField2,
     currentStep: resolvedStep,
     prospectingStepVersion:
       savedVersion < PROSPECTING_STEP_VERSION
@@ -336,8 +354,7 @@ export function normalizeProspectingWizardState(
           ? anyRaw.prospectingStepVersion
           : undefined,
     onboardingComplete,
-    /** Only skip the ICP gate after manager feedback Continue (persisted on stage_data.icp). */
-    icpGateComplete: icpRecord?.feedbackSeen === true,
+    icpGateComplete: icpFieldsComplete || icpDone,
   };
 }
 
@@ -461,6 +478,14 @@ export function countWords(text: string): number {
 }
 
 /**
+ * Returns whether both ICP text fields meet the minimum length to advance.
+ */
+export function isIcpDefinitionComplete(state: ProspectingWizardState): boolean {
+  const minLen = 10;
+  return state.icpField1.trim().length >= minLen && state.icpField2.trim().length >= minLen;
+}
+
+/**
  * Returns whether the student can advance from the current wizard step.
  * Indices: Onboarding (0) → ICP (1) → Data Room (2) → Agent (3) → Lead (4) → Opening (5).
  */
@@ -472,7 +497,7 @@ export function canAdvanceProspectingStep(
     case 0:
       return state.onboardingComplete;
     case 1:
-      return state.icpGateComplete;
+      return isIcpDefinitionComplete(state);
     case 2:
       return state.shortlistedCompanyIds.length === 3;
     case 3:
