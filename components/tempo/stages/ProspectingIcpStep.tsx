@@ -1,14 +1,18 @@
 /**
  * ProspectingIcpStep.tsx
- * ICP step — separate fields for profile, qualification, and trigger (legacy layout).
+ * ICP step — target verticals, size range, operational signals, and disqualifiers.
  */
 
 "use client";
 
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
-import type { ProspectingWizardState } from "@/lib/tempo-prospecting";
+import {
+  parseIcpLocationCount,
+  type ProspectingWizardState,
+} from "@/lib/tempo-prospecting";
 
 const FIELD_MAX_LENGTH = 500;
+const DISQUALIFIER_MAX_LENGTH = 120;
 
 type ProspectingIcpStepProps = {
   attemptId: string;
@@ -20,22 +24,28 @@ type ProspectingIcpStepProps = {
 };
 
 /**
- * Multi-field ICP / qualification / trigger form persisted on the wizard draft.
+ * Four-group ICP form persisted on the wizard draft.
  */
 export function ProspectingIcpStep({
   attemptId: _attemptId,
   state,
   onFieldChange,
 }: ProspectingIcpStepProps): React.ReactElement {
+  const minLoc = parseIcpLocationCount(state.icpSizeMinLocations);
+  const maxLoc = parseIcpLocationCount(state.icpSizeMaxLocations);
+  const sizeRangeInvalid =
+    state.icpSizeMinLocations.trim() !== "" &&
+    state.icpSizeMaxLocations.trim() !== "" &&
+    (minLoc === null || maxLoc === null || maxLoc < minLoc);
+
   return (
     <div className="bg-surface text-on-surface font-body-md min-h-full p-gutter">
       <main className="w-full max-w-4xl mx-auto space-y-xl pb-xl">
         <div className="space-y-sm">
           <h1 className="font-headline-lg text-headline-lg text-primary">Ideal Customer Profile</h1>
           <p className="font-body-md text-body-md text-on-surface-variant">
-            Defining your ICP is the foundation of every successful sales campaign. Be as specific
-            as possible about the organizations and personas that derive the most value from your
-            solution.
+            Define who you are hunting for before you open the data room. Be specific about
+            verticals, size, fit signals, and what rules a prospect out.
           </p>
         </div>
 
@@ -44,55 +54,163 @@ export function ProspectingIcpStep({
           <div className="space-y-xs">
             <h2 className="font-bold text-label-md">Rehearse Tip</h2>
             <p className="text-label-md leading-relaxed opacity-90">
-              Focus on pain points rather than demographics. A customer&apos;s industry matters less
-              than the specific problem they are trying to solve right now.
+              Strong ICPs combine firmographic filters (vertical + size) with operational signals
+              you can verify in research — not just demographics.
             </p>
           </div>
         </div>
 
-        <section className="space-y-lg">
-          <div className="space-y-sm">
-            <div className="flex justify-between items-center">
-              <label className="font-bold text-label-md text-on-surface" htmlFor="icp-field-1">
-                Who is Tempo&apos;s ideal customer?
-              </label>
-              <span className="text-[11px] text-on-surface-variant font-medium">
-                {state.icpField1.length} / {FIELD_MAX_LENGTH}
-              </span>
-            </div>
-            <textarea
-              id="icp-field-1"
-              rows={4}
-              maxLength={FIELD_MAX_LENGTH}
-              className="w-full p-md bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary-container focus:border-secondary focus:outline-none font-body-md resize-y"
-              placeholder="Example: Appointment-based businesses with 2-20 locations..."
-              value={state.icpField1}
-              onChange={(e) => onFieldChange("icpField1", e.target.value)}
-            />
+        <section className="space-y-sm">
+          <div className="flex justify-between items-center">
+            <label className="font-bold text-label-md text-on-surface" htmlFor="icp-target-verticals">
+              Target verticals
+            </label>
+            <span className="text-[11px] text-on-surface-variant font-medium">
+              {state.icpTargetVerticals.length} / {FIELD_MAX_LENGTH}
+            </span>
           </div>
+          <textarea
+            id="icp-target-verticals"
+            rows={3}
+            maxLength={FIELD_MAX_LENGTH}
+            className="w-full p-md bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary-container focus:border-secondary focus:outline-none font-body-md resize-y"
+            placeholder="Example: Multi-location dental groups, specialty clinics expanding regionally..."
+            value={state.icpTargetVerticals}
+            onChange={(e) => onFieldChange("icpTargetVerticals", e.target.value)}
+          />
+        </section>
 
-          <div className="space-y-sm">
-            <div className="flex justify-between items-center">
-              <label className="font-bold text-label-md text-on-surface" htmlFor="icp-field-2">
-                What signals tell you a prospect is worth pursuing?
+        <section className="space-y-sm">
+          <h2 className="font-bold text-label-md text-on-surface">Size range</h2>
+          <p className="font-label-sm text-on-surface-variant">
+            How many locations should your ideal account operate?
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
+            <div>
+              <label className="font-label-sm text-outline mb-1 block" htmlFor="icp-size-min">
+                Min locations
               </label>
-              <span className="text-[11px] text-on-surface-variant font-medium">
-                {state.icpField2.length} / {FIELD_MAX_LENGTH}
-              </span>
+              <input
+                id="icp-size-min"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary p-md font-body-md"
+                placeholder="e.g. 2"
+                value={state.icpSizeMinLocations}
+                onChange={(e) => onFieldChange("icpSizeMinLocations", e.target.value)}
+              />
             </div>
-            <textarea
-              id="icp-field-2"
-              rows={4}
-              maxLength={FIELD_MAX_LENGTH}
-              className="w-full p-md bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary-container focus:border-secondary focus:outline-none font-body-md resize-y"
-              placeholder="Example: Recent expansion, job listings for front desk staff..."
-              value={state.icpField2}
-              onChange={(e) => onFieldChange("icpField2", e.target.value)}
-            />
+            <div>
+              <label className="font-label-sm text-outline mb-1 block" htmlFor="icp-size-max">
+                Max locations
+              </label>
+              <input
+                id="icp-size-max"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary p-md font-body-md"
+                placeholder="e.g. 20"
+                value={state.icpSizeMaxLocations}
+                onChange={(e) => onFieldChange("icpSizeMaxLocations", e.target.value)}
+              />
+            </div>
+          </div>
+          {sizeRangeInvalid ? (
+            <p className="font-label-sm text-error">
+              Enter valid location counts with max greater than or equal to min.
+            </p>
+          ) : null}
+        </section>
+
+        <section className="space-y-sm">
+          <div className="flex justify-between items-center">
+            <label
+              className="font-bold text-label-md text-on-surface"
+              htmlFor="icp-operational-signals"
+            >
+              Operational signals that predict fit
+            </label>
+            <span className="text-[11px] text-on-surface-variant font-medium">
+              {state.icpOperationalSignals.length} / {FIELD_MAX_LENGTH}
+            </span>
+          </div>
+          <textarea
+            id="icp-operational-signals"
+            rows={5}
+            maxLength={FIELD_MAX_LENGTH}
+            className="w-full p-md bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary-container focus:border-secondary focus:outline-none font-body-md resize-y"
+            placeholder="Example: Recent location openings, front-desk hiring spikes, manual scheduling bottlenecks across sites..."
+            value={state.icpOperationalSignals}
+            onChange={(e) => onFieldChange("icpOperationalSignals", e.target.value)}
+          />
+          <p className="font-label-sm text-on-surface-variant">
+            List observable signals you can verify during research — not generic intent.
+          </p>
+        </section>
+
+        <section className="space-y-md">
+          <div>
+            <h2 className="font-bold text-label-md text-on-surface">Disqualifiers</h2>
+            <p className="font-label-sm text-on-surface-variant mt-xs">
+              Name 2–3 hard rules that mean you walk away, even if the account looks interesting.
+            </p>
+          </div>
+          <div className="space-y-md">
+            {(
+              [
+                {
+                  id: "icp-disqualifier-1",
+                  key: "icpDisqualifier1" as const,
+                  label: "Disqualifier 1",
+                  required: true,
+                },
+                {
+                  id: "icp-disqualifier-2",
+                  key: "icpDisqualifier2" as const,
+                  label: "Disqualifier 2",
+                  required: true,
+                },
+                {
+                  id: "icp-disqualifier-3",
+                  key: "icpDisqualifier3" as const,
+                  label: "Disqualifier 3",
+                  required: false,
+                },
+              ] as const
+            ).map((field) => (
+              <div key={field.id} className="space-y-xs">
+                <div className="flex justify-between items-center">
+                  <label className="font-label-sm text-outline" htmlFor={field.id}>
+                    {field.label}
+                    {!field.required ? " (optional)" : ""}
+                  </label>
+                  <span className="text-[11px] text-on-surface-variant font-medium">
+                    {state[field.key].length} / {DISQUALIFIER_MAX_LENGTH}
+                  </span>
+                </div>
+                <input
+                  id={field.id}
+                  type="text"
+                  maxLength={DISQUALIFIER_MAX_LENGTH}
+                  className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary p-md font-body-md"
+                  placeholder={
+                    field.key === "icpDisqualifier1"
+                      ? "e.g. Single-location solo practice"
+                      : field.key === "icpDisqualifier2"
+                        ? "e.g. No appointment-based scheduling workflow"
+                        : "e.g. Already locked into a multi-year competitor contract"
+                  }
+                  value={state[field.key]}
+                  onChange={(e) => onFieldChange(field.key, e.target.value)}
+                />
+              </div>
+            ))}
           </div>
         </section>
 
-        {state.icpField1.trim() ? (
+        {state.icpTargetVerticals.trim() ? (
           <div
             className="p-lg rounded-lg border-l-4 border-l-secondary"
             style={{
@@ -115,178 +233,16 @@ export function ProspectingIcpStep({
               </div>
             </div>
             <p className="font-body-md text-on-surface-variant italic border-l-2 border-outline-variant pl-md">
-              &ldquo;{state.icpField1.slice(0, 150)}
-              {state.icpField1.length > 150 ? "..." : ""}&rdquo;
+              &ldquo;{state.icpTargetVerticals.slice(0, 150)}
+              {state.icpTargetVerticals.length > 150 ? "..." : ""}&rdquo;
             </p>
+            {minLoc !== null && maxLoc !== null && maxLoc >= minLoc ? (
+              <p className="font-label-sm text-on-surface-variant mt-sm pl-md">
+                Size: {minLoc}–{maxLoc} locations
+              </p>
+            ) : null}
           </div>
         ) : null}
-
-        <section className="space-y-lg">
-          <h2 className="font-headline-md text-headline-md text-primary">Account Qualification</h2>
-
-          <div className="bg-surface-container-lowest border border-outline-variant p-lg rounded-xl shadow-sm">
-            <label className="block font-label-md font-bold text-primary mb-md" htmlFor="fit-justification">
-              Why does your target account fit?
-            </label>
-            <textarea
-              id="fit-justification"
-              rows={4}
-              maxLength={FIELD_MAX_LENGTH}
-              className="w-full bg-surface-container-low border border-outline-variant rounded-lg font-body-md focus:ring-2 focus:ring-secondary focus:border-transparent p-md resize-y"
-              placeholder="Outline the specific signals that match your target to your ICP..."
-              value={state.fitJustification}
-              onChange={(e) => onFieldChange("fitJustification", e.target.value)}
-            />
-            <div className="mt-sm flex justify-between items-center">
-              <p className="font-label-sm text-outline">Aim for 2-3 specific examples.</p>
-              <p className="font-label-sm text-outline">{state.fitJustification.length} / {FIELD_MAX_LENGTH}</p>
-            </div>
-          </div>
-
-          <div className="bg-surface-container-lowest border border-outline-variant p-lg rounded-xl shadow-sm">
-            <h3 className="font-label-md font-bold text-primary mb-md">Decision Maker Details</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-              <div>
-                <label className="font-label-sm text-outline mb-1 block" htmlFor="dm-name">
-                  Full Name
-                </label>
-                <input
-                  id="dm-name"
-                  className="w-full bg-surface-container-low border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary p-2"
-                  placeholder="e.g. Dana Reyes"
-                  value={state.dmName}
-                  onChange={(e) => onFieldChange("dmName", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="font-label-sm text-outline mb-1 block" htmlFor="dm-role">
-                  Role / Title
-                </label>
-                <input
-                  id="dm-role"
-                  className="w-full bg-surface-container-low border border-outline-variant rounded-lg focus:ring-2 focus:ring-secondary p-2"
-                  placeholder="e.g. Director of Operations"
-                  value={state.dmRole}
-                  onChange={(e) => onFieldChange("dmRole", e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-surface-container-lowest border border-outline-variant p-lg rounded-xl shadow-sm">
-            <h3 className="font-label-md font-bold text-primary mb-lg">Qualification Scores</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-md">
-              <div>
-                <label className="block font-label-sm text-outline uppercase mb-2" htmlFor="fit-rating">
-                  Fit Rating
-                </label>
-                <select
-                  id="fit-rating"
-                  className="w-full appearance-none bg-surface-container-low border border-outline-variant rounded-lg py-2.5 px-3 font-body-md focus:ring-2 focus:ring-secondary"
-                  value={state.fitRating}
-                  onChange={(e) => onFieldChange("fitRating", e.target.value)}
-                >
-                  <option value="">Select rating...</option>
-                  <option value="strong">Strong Fit</option>
-                  <option value="moderate">Moderate Fit</option>
-                  <option value="weak">Weak Fit</option>
-                  <option value="no">Not a Fit</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-label-sm text-outline uppercase mb-2" htmlFor="confidence">
-                  Confidence Level
-                </label>
-                <select
-                  id="confidence"
-                  className="w-full appearance-none bg-surface-container-low border border-outline-variant rounded-lg py-2.5 px-3 font-body-md focus:ring-2 focus:ring-secondary"
-                  value={state.confidence}
-                  onChange={(e) => onFieldChange("confidence", e.target.value)}
-                >
-                  <option value="">Select confidence...</option>
-                  <option value="high">High — Solid Data</option>
-                  <option value="medium">Medium — Educated Guess</option>
-                  <option value="low">Low — Needs Verification</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-lg">
-          <header>
-            <span className="inline-flex items-center gap-xs text-secondary font-bold text-label-sm uppercase tracking-wider mb-sm">
-              <MaterialIcon name="bolt" className="text-sm" />
-              Contextual Intelligence
-            </span>
-            <h2 className="font-headline-md text-headline-md text-on-surface mb-md">
-              Defining Your Trigger Event
-            </h2>
-            <p className="text-body-md text-on-surface-variant max-w-2xl">
-              A trigger event is a specific, observable change in the prospect&apos;s world that
-              creates an immediate opening for your solution.
-            </p>
-          </header>
-
-          <div className="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant shadow-sm">
-            <label className="block font-label-md font-bold text-on-surface mb-sm" htmlFor="trigger-event">
-              Describe your primary trigger event
-            </label>
-            <textarea
-              id="trigger-event"
-              rows={4}
-              maxLength={FIELD_MAX_LENGTH}
-              className="w-full border border-outline-variant rounded-lg p-md font-body-md focus:ring-2 focus:ring-secondary-container focus:border-secondary resize-none"
-              placeholder="Example: Summit Dental just opened their 8th location three months ago..."
-              value={state.triggerEvent}
-              onChange={(e) => onFieldChange("triggerEvent", e.target.value)}
-            />
-            <div className="flex justify-between items-center mt-sm">
-              <p className="text-label-sm text-on-surface-variant italic">Focus on timing and relevance.</p>
-              <span className="text-label-sm text-on-surface-variant">
-                {state.triggerEvent.length} / {FIELD_MAX_LENGTH}
-              </span>
-            </div>
-          </div>
-
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm overflow-hidden">
-            <div className="p-md bg-surface-container-low border-b border-outline-variant">
-              <h3 className="font-headline-md text-body-lg font-bold">Trigger Quality Benchmark</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2">
-              <div className="p-lg border-b md:border-b-0 md:border-r border-outline-variant bg-green-50/30">
-                <div className="flex items-center gap-sm mb-md text-emerald-700">
-                  <MaterialIcon name="check_circle" />
-                  <span className="font-bold text-label-md uppercase">Strong Trigger</span>
-                </div>
-                <ul className="space-y-md text-body-md">
-                  <li>
-                    <strong>Specific Growth:</strong> Opening 8th practice — manual scheduling is
-                    straining.
-                  </li>
-                  <li>
-                    <strong>Hiring Signal:</strong> Job listing for front desk coordinator suggests
-                    overload.
-                  </li>
-                </ul>
-              </div>
-              <div className="p-lg bg-red-50/30">
-                <div className="flex items-center gap-sm mb-md text-error">
-                  <MaterialIcon name="cancel" />
-                  <span className="font-bold text-label-md uppercase">Weak Trigger</span>
-                </div>
-                <ul className="space-y-md text-body-md">
-                  <li>
-                    <strong>Generic Intent:</strong> They seem like they might want to grow soon.
-                  </li>
-                  <li>
-                    <strong>No Trigger:</strong> I wanted to introduce myself and our product.
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
     </div>
   );

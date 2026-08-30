@@ -14,6 +14,7 @@ import {
   canSubmitProspectingBrief,
   countWords,
   DEFAULT_PROSPECTING_WIZARD_STATE,
+  ICP_FORM_FIELD_KEYS,
   isIcpDefinitionComplete,
   loadProspectingWizardFromStorage,
   PROSPECTING_STEP_VERSION,
@@ -147,16 +148,7 @@ export function useProspectingWizard({
     <K extends keyof ProspectingWizardState>(key: K, value: ProspectingWizardState[K]): void => {
       setState((prev) => {
         const next = { ...prev, [key]: value };
-        if (
-          key === "icpField1" ||
-          key === "icpField2" ||
-          key === "fitJustification" ||
-          key === "dmName" ||
-          key === "dmRole" ||
-          key === "fitRating" ||
-          key === "confidence" ||
-          key === "triggerEvent"
-        ) {
+        if ((ICP_FORM_FIELD_KEYS as readonly string[]).includes(key)) {
           next.icpGateComplete = isIcpDefinitionComplete(next);
         }
         void persistState(next);
@@ -391,14 +383,13 @@ export function useProspectingWizard({
     setIsSubmitting(true);
     try {
       const transcript = JSON.stringify({
-        icpField1: state.icpField1,
-        icpField2: state.icpField2,
-        fitJustification: state.fitJustification,
-        dmName: state.dmName,
-        dmRole: state.dmRole,
-        fitRating: state.fitRating,
-        confidence: state.confidence,
-        triggerEvent: state.triggerEvent,
+        icpTargetVerticals: state.icpTargetVerticals,
+        icpSizeMinLocations: state.icpSizeMinLocations,
+        icpSizeMaxLocations: state.icpSizeMaxLocations,
+        icpOperationalSignals: state.icpOperationalSignals,
+        icpDisqualifier1: state.icpDisqualifier1,
+        icpDisqualifier2: state.icpDisqualifier2,
+        icpDisqualifier3: state.icpDisqualifier3,
         companyChats: state.companyChats,
         selectedCompanyId: state.selectedCompanyId,
         chatMessages: state.chatMessages,

@@ -16,7 +16,18 @@ export type ProspectingStepId =
   | "opening";
 
 /** Latest prospectingStepVersion — bump when PROSPECTING_STEPS layout changes. */
-export const PROSPECTING_STEP_VERSION = 4;
+export const PROSPECTING_STEP_VERSION = 5;
+
+/** Keys on ProspectingWizardState that belong to the ICP form (step 1). */
+export const ICP_FORM_FIELD_KEYS = [
+  "icpTargetVerticals",
+  "icpSizeMinLocations",
+  "icpSizeMaxLocations",
+  "icpOperationalSignals",
+  "icpDisqualifier1",
+  "icpDisqualifier2",
+  "icpDisqualifier3",
+] as const satisfies readonly (keyof ProspectingWizardState)[];
 
 export type ProspectingStepDefinition = {
   id: ProspectingStepId;
@@ -153,14 +164,13 @@ export const OPENING_MESSAGE_TIPS = SELF_CHECK_ITEMS.map((item) => item.label);
 
 export type ProspectingWizardState = {
   currentStep: number;
-  icpField1: string;
-  icpField2: string;
-  fitJustification: string;
-  dmName: string;
-  dmRole: string;
-  fitRating: string;
-  confidence: string;
-  triggerEvent: string;
+  icpTargetVerticals: string;
+  icpSizeMinLocations: string;
+  icpSizeMaxLocations: string;
+  icpOperationalSignals: string;
+  icpDisqualifier1: string;
+  icpDisqualifier2: string;
+  icpDisqualifier3: string;
   /** @deprecated Prefer companyChats; kept as flatten of active chat for older drafts. */
   chatMessages: ChatMessage[];
   /** Per-company research transcripts keyed by directory company id. */
@@ -195,14 +205,13 @@ export type ProspectingWizardState = {
 
 export const DEFAULT_PROSPECTING_WIZARD_STATE: ProspectingWizardState = {
   currentStep: 0,
-  icpField1: "",
-  icpField2: "",
-  fitJustification: "",
-  dmName: "",
-  dmRole: "",
-  fitRating: "",
-  confidence: "",
-  triggerEvent: "",
+  icpTargetVerticals: "",
+  icpSizeMinLocations: "",
+  icpSizeMaxLocations: "",
+  icpOperationalSignals: "",
+  icpDisqualifier1: "",
+  icpDisqualifier2: "",
+  icpDisqualifier3: "",
   chatMessages: [],
   companyChats: {},
   selectedCompanyId: null,
@@ -218,6 +227,59 @@ export const DEFAULT_PROSPECTING_WIZARD_STATE: ProspectingWizardState = {
   onboardingComplete: false,
   icpGateComplete: false,
 };
+
+/**
+ * Parses a location-count input for the ICP size range (positive integer).
+ */
+export function parseIcpLocationCount(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return null;
+  }
+  return parsed;
+}
+
+/**
+ * Reads ICP form fields from persisted draft data, with legacy field fallbacks.
+ */
+export function readIcpFormFields(
+  raw: Record<string, unknown>
+): Pick<
+  ProspectingWizardState,
+  | "icpTargetVerticals"
+  | "icpSizeMinLocations"
+  | "icpSizeMaxLocations"
+  | "icpOperationalSignals"
+  | "icpDisqualifier1"
+  | "icpDisqualifier2"
+  | "icpDisqualifier3"
+> {
+  const str = (key: string): string => (typeof raw[key] === "string" ? raw[key] : "");
+
+  let icpTargetVerticals = str("icpTargetVerticals");
+  let icpOperationalSignals = str("icpOperationalSignals");
+
+  if (!icpTargetVerticals && typeof raw.icpField1 === "string") {
+    icpTargetVerticals = raw.icpField1;
+  }
+  if (!icpOperationalSignals && typeof raw.icpField2 === "string") {
+    icpOperationalSignals = raw.icpField2;
+  }
+
+  return {
+    icpTargetVerticals,
+    icpSizeMinLocations: str("icpSizeMinLocations"),
+    icpSizeMaxLocations: str("icpSizeMaxLocations"),
+    icpOperationalSignals,
+    icpDisqualifier1: str("icpDisqualifier1"),
+    icpDisqualifier2: str("icpDisqualifier2"),
+    icpDisqualifier3: str("icpDisqualifier3"),
+  };
+}
 
 /**
  * Normalizes persisted wizard drafts (including pre-lead-selection 2-step saves).
@@ -287,6 +349,9 @@ export function normalizeProspectingWizardState(
   const hasRealWizardProgress =
     (typeof anyRaw.currentStep === "number" && anyRaw.currentStep > 0) ||
     (typeof anyRaw.selectedLeadId === "string" && anyRaw.selectedLeadId.trim() !== "") ||
+    (typeof anyRaw.icpTargetVerticals === "string" && anyRaw.icpTargetVerticals.trim() !== "") ||
+    (typeof anyRaw.icpOperationalSignals === "string" &&
+      anyRaw.icpOperationalSignals.trim() !== "") ||
     (typeof anyRaw.icpField1 === "string" && anyRaw.icpField1.trim() !== "") ||
     (typeof anyRaw.icpField2 === "string" && anyRaw.icpField2.trim() !== "") ||
     (typeof anyRaw.fitJustification === "string" && anyRaw.fitJustification.trim() !== "") ||
@@ -324,47 +389,28 @@ export function normalizeProspectingWizardState(
       }
     }
     // v3 → v4: onboarding row inserted at index 0; uniform +1 on all saved steps.
-    resolvedStep = Math.min(resolvedStep + 1, PROSPECTING_STEPS.length - 1);
-    onboardingComplete = true;
+    if (savedVersion < 4) {
+      resolvedStep = Math.min(resolvedStep + 1, PROSPECTING_STEPS.length - 1);
+      onboardingComplete = true;
+    }
+    // v4 → v5: ICP field schema change only; step indices unchanged.
   }
+
+  const icpFields = readIcpFormFields(anyRaw);
 
   if (!icpDone) {
     const draftForIcp: ProspectingWizardState = {
       ...DEFAULT_PROSPECTING_WIZARD_STATE,
-      icpField1: typeof anyRaw.icpField1 === "string" ? anyRaw.icpField1 : "",
-      icpField2: typeof anyRaw.icpField2 === "string" ? anyRaw.icpField2 : "",
-      fitJustification:
-        typeof anyRaw.fitJustification === "string" ? anyRaw.fitJustification : "",
-      dmName: typeof anyRaw.dmName === "string" ? anyRaw.dmName : "",
-      dmRole: typeof anyRaw.dmRole === "string" ? anyRaw.dmRole : "",
-      fitRating: typeof anyRaw.fitRating === "string" ? anyRaw.fitRating : "",
-      confidence: typeof anyRaw.confidence === "string" ? anyRaw.confidence : "",
-      triggerEvent: typeof anyRaw.triggerEvent === "string" ? anyRaw.triggerEvent : "",
+      ...icpFields,
     };
     if (!isIcpDefinitionComplete(draftForIcp)) {
       resolvedStep = onboardingComplete ? 1 : 0;
     }
   }
 
-  const icpField1 = typeof anyRaw.icpField1 === "string" ? anyRaw.icpField1 : "";
-  const icpField2 = typeof anyRaw.icpField2 === "string" ? anyRaw.icpField2 : "";
-  const fitJustification =
-    typeof anyRaw.fitJustification === "string" ? anyRaw.fitJustification : "";
-  const dmName = typeof anyRaw.dmName === "string" ? anyRaw.dmName : "";
-  const dmRole = typeof anyRaw.dmRole === "string" ? anyRaw.dmRole : "";
-  const fitRating = typeof anyRaw.fitRating === "string" ? anyRaw.fitRating : "";
-  const confidence = typeof anyRaw.confidence === "string" ? anyRaw.confidence : "";
-  const triggerEvent = typeof anyRaw.triggerEvent === "string" ? anyRaw.triggerEvent : "";
   const icpStepComplete = isIcpDefinitionComplete({
     ...DEFAULT_PROSPECTING_WIZARD_STATE,
-    icpField1,
-    icpField2,
-    fitJustification,
-    dmName,
-    dmRole,
-    fitRating,
-    confidence,
-    triggerEvent,
+    ...icpFields,
   });
 
   return {
@@ -384,14 +430,7 @@ export function normalizeProspectingWizardState(
     agentCorrections: typeof anyRaw.agentCorrections === "string" ? anyRaw.agentCorrections : "",
     prospectingHandoffSeen: Boolean(anyRaw.prospectingHandoffSeen),
     selectedLeadId,
-    icpField1,
-    icpField2,
-    fitJustification,
-    dmName,
-    dmRole,
-    fitRating,
-    confidence,
-    triggerEvent,
+    ...icpFields,
     currentStep: resolvedStep,
     prospectingStepVersion:
       savedVersion < PROSPECTING_STEP_VERSION
@@ -524,19 +563,28 @@ export function countWords(text: string): number {
 }
 
 /**
- * Returns whether both ICP text fields meet the minimum length to advance.
+ * Returns whether the ICP form (step 1) meets advance requirements.
  */
 export function isIcpDefinitionComplete(state: ProspectingWizardState): boolean {
-  const minLen = 10;
+  const minVerticals = 10;
+  const minSignals = 20;
+  const minDisqualifier = 3;
+
+  const minLoc = parseIcpLocationCount(state.icpSizeMinLocations);
+  const maxLoc = parseIcpLocationCount(state.icpSizeMaxLocations);
+  const filledDisqualifiers = [
+    state.icpDisqualifier1,
+    state.icpDisqualifier2,
+    state.icpDisqualifier3,
+  ].filter((value) => value.trim().length >= minDisqualifier);
+
   return (
-    state.icpField1.trim().length >= minLen &&
-    state.icpField2.trim().length >= minLen &&
-    state.fitJustification.trim().length >= minLen &&
-    state.dmName.trim().length >= 2 &&
-    state.dmRole.trim().length >= 2 &&
-    Boolean(state.fitRating) &&
-    Boolean(state.confidence) &&
-    state.triggerEvent.trim().length >= 20
+    state.icpTargetVerticals.trim().length >= minVerticals &&
+    minLoc !== null &&
+    maxLoc !== null &&
+    maxLoc >= minLoc &&
+    state.icpOperationalSignals.trim().length >= minSignals &&
+    filledDisqualifiers.length >= 2
   );
 }
 

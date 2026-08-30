@@ -100,16 +100,13 @@ export function ProspectingStepPanels({
           {
             icon: "person",
             label: "Target",
-            value:
-              state.dmName.trim() && state.dmRole.trim()
-                ? `${state.dmName}, ${state.dmRole}`
-                : "Dana Reyes, Director of Operations",
+            value: "Dana Reyes, Director of Operations",
             color: "text-secondary",
           },
           {
             icon: "bolt",
             label: "Trigger",
-            value: state.triggerEvent.trim() || "Summit 8th location expansion",
+            value: "Summit 8th location expansion",
             color: "text-tertiary-container",
           },
           {
