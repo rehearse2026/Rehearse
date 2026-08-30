@@ -147,7 +147,16 @@ export function useProspectingWizard({
     <K extends keyof ProspectingWizardState>(key: K, value: ProspectingWizardState[K]): void => {
       setState((prev) => {
         const next = { ...prev, [key]: value };
-        if (key === "icpField1" || key === "icpField2") {
+        if (
+          key === "icpField1" ||
+          key === "icpField2" ||
+          key === "fitJustification" ||
+          key === "dmName" ||
+          key === "dmRole" ||
+          key === "fitRating" ||
+          key === "confidence" ||
+          key === "triggerEvent"
+        ) {
           next.icpGateComplete = isIcpDefinitionComplete(next);
         }
         void persistState(next);
@@ -384,6 +393,12 @@ export function useProspectingWizard({
       const transcript = JSON.stringify({
         icpField1: state.icpField1,
         icpField2: state.icpField2,
+        fitJustification: state.fitJustification,
+        dmName: state.dmName,
+        dmRole: state.dmRole,
+        fitRating: state.fitRating,
+        confidence: state.confidence,
+        triggerEvent: state.triggerEvent,
         companyChats: state.companyChats,
         selectedCompanyId: state.selectedCompanyId,
         chatMessages: state.chatMessages,

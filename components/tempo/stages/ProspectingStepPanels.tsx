@@ -62,12 +62,7 @@ export function ProspectingStepPanels({
 
   if (currentStep === 1) {
     return (
-      <ProspectingIcpStep
-        attemptId={attemptId}
-        icpField1={state.icpField1}
-        icpField2={state.icpField2}
-        onFieldChange={onFieldChange}
-      />
+      <ProspectingIcpStep attemptId={attemptId} state={state} onFieldChange={onFieldChange} />
     );
   }
 
@@ -105,13 +100,16 @@ export function ProspectingStepPanels({
           {
             icon: "person",
             label: "Target",
-            value: "Dana Reyes, Director of Operations",
+            value:
+              state.dmName.trim() && state.dmRole.trim()
+                ? `${state.dmName}, ${state.dmRole}`
+                : "Dana Reyes, Director of Operations",
             color: "text-secondary",
           },
           {
             icon: "bolt",
             label: "Trigger",
-            value: "Summit 8th location expansion",
+            value: state.triggerEvent.trim() || "Summit 8th location expansion",
             color: "text-tertiary-container",
           },
           {

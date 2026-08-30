@@ -155,6 +155,12 @@ export type ProspectingWizardState = {
   currentStep: number;
   icpField1: string;
   icpField2: string;
+  fitJustification: string;
+  dmName: string;
+  dmRole: string;
+  fitRating: string;
+  confidence: string;
+  triggerEvent: string;
   /** @deprecated Prefer companyChats; kept as flatten of active chat for older drafts. */
   chatMessages: ChatMessage[];
   /** Per-company research transcripts keyed by directory company id. */
@@ -191,6 +197,12 @@ export const DEFAULT_PROSPECTING_WIZARD_STATE: ProspectingWizardState = {
   currentStep: 0,
   icpField1: "",
   icpField2: "",
+  fitJustification: "",
+  dmName: "",
+  dmRole: "",
+  fitRating: "",
+  confidence: "",
+  triggerEvent: "",
   chatMessages: [],
   companyChats: {},
   selectedCompanyId: null,
@@ -277,6 +289,9 @@ export function normalizeProspectingWizardState(
     (typeof anyRaw.selectedLeadId === "string" && anyRaw.selectedLeadId.trim() !== "") ||
     (typeof anyRaw.icpField1 === "string" && anyRaw.icpField1.trim() !== "") ||
     (typeof anyRaw.icpField2 === "string" && anyRaw.icpField2.trim() !== "") ||
+    (typeof anyRaw.fitJustification === "string" && anyRaw.fitJustification.trim() !== "") ||
+    (typeof anyRaw.triggerEvent === "string" && anyRaw.triggerEvent.trim() !== "") ||
+    (typeof anyRaw.dmName === "string" && anyRaw.dmName.trim() !== "") ||
     shortlistedCompanyIds.length > 0 ||
     directoryCompanyIds.length > 0 ||
     Object.keys(companyChats).length > 0 ||
@@ -314,18 +329,43 @@ export function normalizeProspectingWizardState(
   }
 
   if (!icpDone) {
-    const icpField1 = typeof anyRaw.icpField1 === "string" ? anyRaw.icpField1 : "";
-    const icpField2 = typeof anyRaw.icpField2 === "string" ? anyRaw.icpField2 : "";
-    const icpFieldsComplete =
-      icpField1.trim().length >= 10 && icpField2.trim().length >= 10;
-    if (!icpFieldsComplete) {
+    const draftForIcp: ProspectingWizardState = {
+      ...DEFAULT_PROSPECTING_WIZARD_STATE,
+      icpField1: typeof anyRaw.icpField1 === "string" ? anyRaw.icpField1 : "",
+      icpField2: typeof anyRaw.icpField2 === "string" ? anyRaw.icpField2 : "",
+      fitJustification:
+        typeof anyRaw.fitJustification === "string" ? anyRaw.fitJustification : "",
+      dmName: typeof anyRaw.dmName === "string" ? anyRaw.dmName : "",
+      dmRole: typeof anyRaw.dmRole === "string" ? anyRaw.dmRole : "",
+      fitRating: typeof anyRaw.fitRating === "string" ? anyRaw.fitRating : "",
+      confidence: typeof anyRaw.confidence === "string" ? anyRaw.confidence : "",
+      triggerEvent: typeof anyRaw.triggerEvent === "string" ? anyRaw.triggerEvent : "",
+    };
+    if (!isIcpDefinitionComplete(draftForIcp)) {
       resolvedStep = onboardingComplete ? 1 : 0;
     }
   }
 
   const icpField1 = typeof anyRaw.icpField1 === "string" ? anyRaw.icpField1 : "";
   const icpField2 = typeof anyRaw.icpField2 === "string" ? anyRaw.icpField2 : "";
-  const icpFieldsComplete = icpField1.trim().length >= 10 && icpField2.trim().length >= 10;
+  const fitJustification =
+    typeof anyRaw.fitJustification === "string" ? anyRaw.fitJustification : "";
+  const dmName = typeof anyRaw.dmName === "string" ? anyRaw.dmName : "";
+  const dmRole = typeof anyRaw.dmRole === "string" ? anyRaw.dmRole : "";
+  const fitRating = typeof anyRaw.fitRating === "string" ? anyRaw.fitRating : "";
+  const confidence = typeof anyRaw.confidence === "string" ? anyRaw.confidence : "";
+  const triggerEvent = typeof anyRaw.triggerEvent === "string" ? anyRaw.triggerEvent : "";
+  const icpStepComplete = isIcpDefinitionComplete({
+    ...DEFAULT_PROSPECTING_WIZARD_STATE,
+    icpField1,
+    icpField2,
+    fitJustification,
+    dmName,
+    dmRole,
+    fitRating,
+    confidence,
+    triggerEvent,
+  });
 
   return {
     ...DEFAULT_PROSPECTING_WIZARD_STATE,
@@ -346,6 +386,12 @@ export function normalizeProspectingWizardState(
     selectedLeadId,
     icpField1,
     icpField2,
+    fitJustification,
+    dmName,
+    dmRole,
+    fitRating,
+    confidence,
+    triggerEvent,
     currentStep: resolvedStep,
     prospectingStepVersion:
       savedVersion < PROSPECTING_STEP_VERSION
@@ -354,7 +400,7 @@ export function normalizeProspectingWizardState(
           ? anyRaw.prospectingStepVersion
           : undefined,
     onboardingComplete,
-    icpGateComplete: icpFieldsComplete || icpDone,
+    icpGateComplete: icpStepComplete || icpDone,
   };
 }
 
@@ -482,7 +528,16 @@ export function countWords(text: string): number {
  */
 export function isIcpDefinitionComplete(state: ProspectingWizardState): boolean {
   const minLen = 10;
-  return state.icpField1.trim().length >= minLen && state.icpField2.trim().length >= minLen;
+  return (
+    state.icpField1.trim().length >= minLen &&
+    state.icpField2.trim().length >= minLen &&
+    state.fitJustification.trim().length >= minLen &&
+    state.dmName.trim().length >= 2 &&
+    state.dmRole.trim().length >= 2 &&
+    Boolean(state.fitRating) &&
+    Boolean(state.confidence) &&
+    state.triggerEvent.trim().length >= 20
+  );
 }
 
 /**
