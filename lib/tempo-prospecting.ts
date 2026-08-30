@@ -268,22 +268,23 @@ export function normalizeProspectingWizardState(
   const icpRecord = parseProspectingIcpState(anyRaw.icp);
   const icpDone = icpRecord?.feedbackSeen === true;
 
-  const hasPersistedWizard =
-    typeof anyRaw.prospectingStepVersion === "number" ||
+  const hasRealWizardProgress =
     (typeof anyRaw.currentStep === "number" && anyRaw.currentStep > 0) ||
-    hasSelectedLeadField ||
-    Boolean(anyRaw.onboardingComplete) ||
+    (typeof anyRaw.selectedLeadId === "string" && anyRaw.selectedLeadId.trim() !== "") ||
     shortlistedCompanyIds.length > 0 ||
     directoryCompanyIds.length > 0 ||
     Object.keys(companyChats).length > 0 ||
     legacyMessages.length > 0 ||
-    Boolean(anyRaw.prospectingHandoffSeen) ||
-    Boolean(anyRaw.icpGateComplete);
+    (typeof anyRaw.openingMessage === "string" && anyRaw.openingMessage.trim() !== "") ||
+    icpDone;
+
+  const explicitVersion =
+    typeof anyRaw.prospectingStepVersion === "number" ? anyRaw.prospectingStepVersion : null;
 
   const savedVersion =
-    typeof anyRaw.prospectingStepVersion === "number"
-      ? anyRaw.prospectingStepVersion
-      : hasPersistedWizard
+    explicitVersion !== null
+      ? explicitVersion
+      : hasRealWizardProgress
         ? 1
         : PROSPECTING_STEP_VERSION;
 

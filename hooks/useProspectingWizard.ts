@@ -441,8 +441,18 @@ export function useProspectingWizard({
   }, [attemptId, icpState, state]);
 
   const dismissProspectingHandoff = useCallback((): void => {
-    updateField("prospectingHandoffSeen", true);
-  }, [updateField]);
+    setState((prev) => {
+      const next = {
+        ...prev,
+        prospectingHandoffSeen: true,
+        onboardingComplete: false,
+        currentStep: 0,
+        prospectingStepVersion: PROSPECTING_STEP_VERSION,
+      };
+      void persistState(next);
+      return next;
+    });
+  }, [persistState]);
 
   const wordCount = countWords(state.openingMessage);
   const canProceed = canAdvanceProspectingStep(state.currentStep, state);
