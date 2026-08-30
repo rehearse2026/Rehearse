@@ -19,6 +19,7 @@ import {
   countWords,
   DEFAULT_PROSPECTING_WIZARD_STATE,
   loadProspectingWizardFromStorage,
+  PROSPECTING_STEP_VERSION,
   saveProspectingWizardToStorage,
   sanitizeAiResearchReply,
   normalizeProspectingWizardState,
@@ -62,6 +63,8 @@ type UseProspectingWizardResult = {
   dismissProspectingHandoff: () => void;
   /** Called when ICP feedback Continue unlocks the wizard steps. */
   completeIcpGate: (icp: ProspectingIcpState) => void;
+  /** Called when the onboarding briefing video ends. */
+  completeOnboarding: () => void;
 };
 
 /**
@@ -126,8 +129,14 @@ export function useProspectingWizard({
         nextState = {
           ...nextState,
           icpGateComplete: icpDone,
-          currentStep: icpDone ? nextState.currentStep : 0,
-          prospectingStepVersion: icpDone ? nextState.prospectingStepVersion ?? 3 : undefined,
+          currentStep: icpDone
+            ? nextState.currentStep
+            : nextState.onboardingComplete
+              ? 1
+              : 0,
+          prospectingStepVersion: icpDone
+            ? nextState.prospectingStepVersion ?? PROSPECTING_STEP_VERSION
+            : undefined,
         };
         saveProspectingWizardToStorage(attemptId, nextState);
 
@@ -163,6 +172,17 @@ export function useProspectingWizard({
     [persistState]
   );
 
+  const completeOnboarding = useCallback((): void => {
+    setState((prev) => {
+      if (prev.onboardingComplete) {
+        return prev;
+      }
+      const next = { ...prev, onboardingComplete: true };
+      void persistState(next);
+      return next;
+    });
+  }, [persistState]);
+
   const completeIcpGate = useCallback(
     (icp: ProspectingIcpState): void => {
       setIcpState(icp);
@@ -170,8 +190,8 @@ export function useProspectingWizard({
         const next = {
           ...prev,
           icpGateComplete: true,
-          currentStep: Math.max(prev.currentStep, 1),
-          prospectingStepVersion: 3,
+          currentStep: Math.max(prev.currentStep, 2),
+          prospectingStepVersion: PROSPECTING_STEP_VERSION,
         };
         void persistState(next);
         return next;
@@ -182,12 +202,15 @@ export function useProspectingWizard({
 
   const setCurrentStep = useCallback(
     (step: number): void => {
-      if (step > 0 && !state.icpGateComplete) {
+      if (step > 0 && !state.onboardingComplete) {
+        return;
+      }
+      if (step > 1 && !state.icpGateComplete) {
         return;
       }
       updateField("currentStep", step);
     },
-    [state.icpGateComplete, updateField]
+    [state.icpGateComplete, state.onboardingComplete, updateField]
   );
 
   /**
@@ -288,7 +311,12 @@ export function useProspectingWizard({
   const completeLeadSelection = useCallback(
     async (leadId: string): Promise<void> => {
       setState((prev) => {
-        const next = { ...prev, selectedLeadId: leadId, currentStep: 4, prospectingStepVersion: 3 };
+        const next = {
+          ...prev,
+          selectedLeadId: leadId,
+          currentStep: 5,
+          prospectingStepVersion: PROSPECTING_STEP_VERSION,
+        };
         void persistState(next);
         return next;
       });
@@ -445,5 +473,6 @@ export function useProspectingWizard({
     handleSubmit,
     dismissProspectingHandoff,
     completeIcpGate,
+    completeOnboarding,
   };
 }

@@ -1,12 +1,13 @@
 /**
  * ProspectingStepPanels.tsx
  * Step content panels for the Tempo Stage 1 Prospecting wizard.
- * Steps: ICP → Data Room → Build Your Agent → Select Target Lead → Opening Message.
+ * Steps: Welcome Briefing → ICP → Data Room → Build Your Agent → Select Lead → Opening.
  */
 
 "use client";
 
 import { ProspectingAgentStep } from "@/components/tempo/stages/ProspectingAgentStep";
+import { ProspectingOnboardingStep } from "@/components/tempo/stages/ProspectingOnboardingStep";
 import { ProspectingDataRoom } from "@/components/tempo/stages/ProspectingDataRoom";
 import { ProspectingIcpStep } from "@/components/tempo/stages/ProspectingIcpStep";
 import { ProspectingLeadSelectionStep } from "@/components/tempo/stages/ProspectingLeadSelectionStep";
@@ -33,6 +34,7 @@ type StepPanelsProps = {
   canResearchContinue?: boolean;
   icpState: ProspectingIcpState | null;
   onIcpComplete: (icp: ProspectingIcpState) => void;
+  onOnboardingComplete: () => void;
 };
 
 /**
@@ -51,8 +53,19 @@ export function ProspectingStepPanels({
   canResearchContinue = false,
   icpState,
   onIcpComplete,
+  onOnboardingComplete,
 }: StepPanelsProps): React.ReactElement {
   if (currentStep === 0) {
+    return (
+      <ProspectingOnboardingStep
+        attemptId={attemptId}
+        onboardingComplete={state.onboardingComplete}
+        onOnboardingComplete={onOnboardingComplete}
+      />
+    );
+  }
+
+  if (currentStep === 1) {
     return (
       <ProspectingIcpStep
         attemptId={attemptId}
@@ -62,7 +75,7 @@ export function ProspectingStepPanels({
     );
   }
 
-  if (currentStep === 1) {
+  if (currentStep === 2) {
     return (
       <ProspectingDataRoom
         attemptId={attemptId}
@@ -75,11 +88,11 @@ export function ProspectingStepPanels({
     );
   }
 
-  if (currentStep === 2) {
+  if (currentStep === 3) {
     return <ProspectingAgentStep attemptId={attemptId} />;
   }
 
-  if (currentStep === 3) {
+  if (currentStep === 4) {
     return (
       <ProspectingLeadSelectionStep
         attemptId={attemptId}

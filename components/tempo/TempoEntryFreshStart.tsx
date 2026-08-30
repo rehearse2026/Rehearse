@@ -6,7 +6,6 @@
 
 import Link from "next/link";
 import { MaterialIcon } from "@/components/ui/MaterialIcon";
-import { TempoOnboardingVideoInline } from "@/components/tempo/TempoOnboardingVideoModal";
 import { COLORS } from "@/lib/design-tokens";
 import { TEMPO_STAGES } from "@/lib/tempo-simulation";
 
@@ -115,13 +114,6 @@ export function TempoEntryFreshStart({
               </div>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ONBOARDING VIDEO */}
-      <section className="bg-white py-12 lg:py-16">
-        <div className="max-w-[1100px] mx-auto px-6 lg:px-8">
-          <TempoOnboardingVideoInline />
         </div>
       </section>
 

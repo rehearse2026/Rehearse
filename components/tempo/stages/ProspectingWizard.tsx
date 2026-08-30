@@ -1,7 +1,7 @@
 /**
  * ProspectingWizard.tsx
- * Stage 1 of the Tempo simulation — 5-step prospecting wizard (ICP → Data Room →
- * Build Your Agent → Select Lead → Opening Message) with manager handoff.
+ * Stage 1 of the Tempo simulation — 6-step prospecting wizard (Welcome Briefing →
+ * ICP → Data Room → Build Your Agent → Select Lead → Opening Message) with handoff.
  * Only rendered for Tempo in the Rehearse Essentials default class.
  */
 
@@ -196,7 +196,7 @@ export function ProspectingWizard({
                 <button
                   type="button"
                   onClick={() => wizard.setCurrentStep(currentStep - 1)}
-                  disabled={currentStep === 1 && !icpComplete}
+                  disabled={currentStep === 2 && !icpComplete}
                   className="inline-flex items-center gap-1 text-label-sm text-on-surface-variant hover:text-primary transition-colors shrink-0 disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <MaterialIcon name="arrow_back" className="text-[16px]" />
@@ -212,6 +212,18 @@ export function ProspectingWizard({
             </div>
 
             <div className="flex items-center gap-md shrink-0">
+                {currentStep === 0 ? (
+                  <span
+                    className={`hidden sm:inline text-label-sm ${
+                      state.onboardingComplete ? "text-green-600" : "text-on-surface-variant"
+                    }`}
+                  >
+                    {state.onboardingComplete
+                      ? "Briefing complete — you can continue"
+                      : "Watch the briefing to unlock Next"}
+                  </span>
+                ) : null}
+
                 {currentStep > 0 && currentStep === PROSPECTING_STEPS.length - 1 ? (
                   <button
                     type="button"
@@ -222,7 +234,7 @@ export function ProspectingWizard({
                   </button>
                 ) : null}
 
-                {currentStep > 0 && currentStep < PROSPECTING_STEPS.length - 1 ? (
+                {currentStep < PROSPECTING_STEPS.length - 1 ? (
                   <button
                     type="button"
                     disabled={!wizard.canProceed}
@@ -259,7 +271,7 @@ export function ProspectingWizard({
 
           <div
             className={`flex-1 min-h-0 overflow-y-auto ${
-              currentStep === 1 ? "p-2 lg:p-3" : "p-4 lg:p-xl"
+              currentStep === 2 ? "p-2 lg:p-3" : "p-4 lg:p-xl"
             }`}
           >
             <ProspectingStepPanels
@@ -275,6 +287,7 @@ export function ProspectingWizard({
               canResearchContinue={wizard.canProceed}
               icpState={wizard.icpState}
               onIcpComplete={wizard.completeIcpGate}
+              onOnboardingComplete={wizard.completeOnboarding}
             />
           </div>
         </section>
