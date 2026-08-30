@@ -13,7 +13,7 @@ export type ProspectDirectoryContact = {
   department: string;
 };
 
-/** Full directory row including target flag (server-only; never send isTarget to clients). */
+/** Full directory row including server-only answer-key fields. */
 export type ProspectDirectoryCompanyRow = {
   id: string;
   name: string;
@@ -22,12 +22,29 @@ export type ProspectDirectoryCompanyRow = {
   signalHint: string;
   /** Server-only scripted research claim; stripped by toPublicProspectCompany(). */
   hiddenClaim?: string | null;
-  /** Optional because legacy seed rows predate directory contacts. */
   contacts?: ProspectDirectoryContact[];
+  /** Server-only legacy target flag; stripped by toPublicProspectCompany(). */
   isTarget: boolean;
+  vertical?: string;
+  locations?: number;
+  metro?: string;
+  inTerritory?: boolean;
+  sizeNote?: string;
+  onlineBooking?: boolean;
+  blurb?: string;
+  publicSignals?: string[];
+  researchFacts?: string[];
+  class?: string;
+  subtype?: string | null;
+  fitRank?: number | null;
+  triggerQuality?: string;
+  keyedTrigger?: string | null;
+  bestContact?: string | null;
+  why?: string | null;
+  entryType?: string;
 };
 
-/** Public company card shape returned by the directory API. */
+/** Public company card shape returned by the directory API (visible layer only). */
 export type ProspectDirectoryCompany = {
   id: string;
   name: string;
@@ -35,7 +52,56 @@ export type ProspectDirectoryCompany = {
   sizeLabel: string;
   signalHint: string;
   contacts: ProspectDirectoryContact[];
+  vertical?: string;
+  locations?: number;
+  metro?: string;
+  inTerritory?: boolean;
+  sizeNote?: string;
+  onlineBooking?: boolean;
+  blurb?: string;
+  publicSignals?: string[];
 };
+
+/** Allowed top-level keys on the public prospect company payload. */
+export const PUBLIC_PROSPECT_COMPANY_KEYS = [
+  "id",
+  "name",
+  "industry",
+  "sizeLabel",
+  "signalHint",
+  "contacts",
+  "vertical",
+  "locations",
+  "metro",
+  "inTerritory",
+  "sizeNote",
+  "onlineBooking",
+  "blurb",
+  "publicSignals",
+] as const;
+
+/** Hidden server-only field names that must never appear on public payloads. */
+export const HIDDEN_PROSPECT_DIRECTORY_FIELD_NAMES = [
+  "researchFacts",
+  "research_facts",
+  "class",
+  "subtype",
+  "fitRank",
+  "fit_rank",
+  "triggerQuality",
+  "trigger_quality",
+  "keyedTrigger",
+  "keyed_trigger",
+  "bestContact",
+  "best_contact",
+  "why",
+  "hiddenClaim",
+  "hidden_claim",
+  "entryType",
+  "entry_type",
+  "isTarget",
+  "signal_hint",
+] as const;
 
 /** Show every non-target company in the 25-company Tempo directory. */
 export const PROSPECT_DIRECTORY_DECOY_COUNT = 24;
@@ -168,12 +234,12 @@ export const PROSPECT_DIRECTORY_SEED: readonly ProspectDirectoryCompanyRow[] = [
 ] as const;
 
 /**
- * Strips the server-only target flag before returning companies to the client.
+ * Strips server-only answer-key fields before returning companies to the client.
  */
 export function toPublicProspectCompany(
   row: ProspectDirectoryCompanyRow
 ): ProspectDirectoryCompany {
-  return {
+  const payload: ProspectDirectoryCompany = {
     id: row.id,
     name: row.name,
     industry: row.industry,
@@ -181,6 +247,59 @@ export function toPublicProspectCompany(
     signalHint: row.signalHint,
     contacts: row.contacts ?? [],
   };
+
+  if (row.vertical !== undefined) {
+    payload.vertical = row.vertical;
+  }
+  if (row.locations !== undefined) {
+    payload.locations = row.locations;
+  }
+  if (row.metro !== undefined) {
+    payload.metro = row.metro;
+  }
+  if (row.inTerritory !== undefined) {
+    payload.inTerritory = row.inTerritory;
+  }
+  if (row.sizeNote !== undefined) {
+    payload.sizeNote = row.sizeNote;
+  }
+  if (row.onlineBooking !== undefined) {
+    payload.onlineBooking = row.onlineBooking;
+  }
+  if (row.blurb !== undefined) {
+    payload.blurb = row.blurb;
+  }
+  if (row.publicSignals !== undefined) {
+    payload.publicSignals = row.publicSignals;
+  }
+
+  return payload;
+}
+
+/**
+ * Throws when a public payload includes keys outside the visible-layer allowlist.
+ */
+export function assertNoHiddenFieldsInPublicPayload(payload: ProspectDirectoryCompany): void {
+  const allowed = new Set<string>(PUBLIC_PROSPECT_COMPANY_KEYS);
+  for (const key of Object.keys(payload)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Public payload contains disallowed key: ${key}`);
+    }
+  }
+
+  for (const hidden of HIDDEN_PROSPECT_DIRECTORY_FIELD_NAMES) {
+    if (Object.prototype.hasOwnProperty.call(payload, hidden)) {
+      throw new Error(`Public payload leaked hidden field: ${hidden}`);
+    }
+  }
+
+  for (const contact of payload.contacts) {
+    for (const key of Object.keys(contact)) {
+      if (!["name", "title", "department"].includes(key)) {
+        throw new Error(`Public contact payload leaked field: ${key}`);
+      }
+    }
+  }
 }
 
 /**

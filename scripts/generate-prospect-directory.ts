@@ -1,18 +1,22 @@
 /**
  * generate-prospect-directory.ts
- * Reusable prospect-directory seeder — all simulation content lives in config files.
- * Seeds crm_prospect_directory companies and 3 crm_prospect_contacts rows each.
+ * Reusable prospect-directory seeder — simulation content lives in config files.
+ * Wipes and regenerates crm_prospect_directory + contacts for one simulation_id.
  * Runnable via: npx tsx scripts/generate-prospect-directory.ts
  */
 
 import { readFileSync } from "fs";
 import { join } from "path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  failsVisibleIcpAxis,
+  scoreIcpFit,
+  type IcpFitCompanyInput,
+} from "./config/tempo-icp";
 import { randomPerson } from "./shared/person-name-pool";
 
-// ── Contact + company entry shapes ───────────────────────────────────────────
+// ── Contact + company shapes ─────────────────────────────────────────────────
 
-/** One person attached to a directory company. */
 export interface ContactEntry {
   contactName: string;
   contactTitle: string;
@@ -20,68 +24,79 @@ export interface ContactEntry {
   gender: "male" | "female";
 }
 
-/** Hand-authored trap contact with competitive-axis rationale. */
 export interface DesignedTrapContact extends ContactEntry {
   strongerAxis: string;
   weakerAxis: string;
 }
 
-/** Correct contact + exactly two designed traps for target/crafted decoys. */
 export interface DesignedContactSet {
   correct: ContactEntry;
   traps: DesignedTrapContact[];
 }
 
-export interface DirectoryEntry {
+export type CompanyClass = "strong_fit" | "near_miss" | "trap" | "pass";
+export type TriggerQuality = "strong" | "weak" | "none";
+
+export type NearMissSubtype =
+  | "too_small"
+  | "no_strain"
+  | "adjacent_vertical"
+  | "too_big"
+  | "out_of_territory";
+
+export type TrapSubtype =
+  | "already_solved"
+  | "franchise_power"
+  | "contracting"
+  | "phantom_fit";
+
+export interface DesignedCompany {
   companyName: string;
-  industry: string;
-  sizeLocations: string;
-  signalHint?: string;
-  hiddenClaim?: string;
-  /**
-   * Filler-only primary contact fields (mirrored onto the directory row).
-   * Designed companies use contactSet.correct instead.
-   */
-  contactName?: string;
-  contactTitle?: string;
+  vertical: string;
+  locations: number;
+  metro: string;
+  inTerritory: boolean;
+  sizeNote: string;
+  onlineBooking: boolean;
+  blurb: string;
+  publicSignals: string[];
+  researchFacts: string[];
+  class: CompanyClass;
+  subtype: string | null;
+  fitRank: number | null;
+  triggerQuality: TriggerQuality;
+  keyedTrigger: string | null;
+  bestContact: string | null;
+  why: string | null;
+  contactSet?: DesignedContactSet;
 }
 
-/** Target / designed company with a full 3-contact set. */
-export interface DesignedDirectoryEntry extends DirectoryEntry {
-  contactSet: DesignedContactSet;
-}
-
-/** Hand-authored decoys must declare competitive axes (validated before generation). */
-export interface CraftedDecoyEntry extends DesignedDirectoryEntry {
-  strongerAxis: string;
-  weakerAxis: string;
-}
-
-/**
- * Config-defined numeric comparison used for decoy/trap validation and filler capping.
- * Generic over the subject type so company-level and contact-level axes share one shape.
- */
 export interface ComparableAxis<TSubject> {
   name: string;
   keywords: string[];
-  getValue: (subject: TSubject, config: DirectoryConfig) => number | null;
-  regenerateFillerValue?: (config: DirectoryConfig) => Partial<TSubject>;
+  getValue: (subject: TSubject, config: TempoDirectorySeedConfig) => number | null;
 }
 
-export interface DirectoryConfig {
+export interface TempoDirectorySeedConfig {
   simulationId: string;
-  target: DesignedDirectoryEntry;
-  craftedDecoys: CraftedDecoyEntry[];
-  fillerCount: number;
-  industryPool: string[];
+  authoredCompanies: DesignedCompany[];
+  generationPlan: {
+    strong_fit: number;
+    near_miss: number;
+    trap: number;
+    pass: number;
+  };
+  corePainDepartment: string;
+  verticalPool: string[];
+  metroPoolInTerritory: string[];
+  metroPoolOutOfTerritory: string[];
+  passVerticalPool: string[];
   namePrefixPool: string[];
-  suffixByIndustry: Record<string, string[]>;
+  suffixByVertical: Record<string, string[]>;
+  passSuffixPool: string[];
   contactTitlePool: string[];
   contactDepartmentPool: string[];
   contactTitleSeniorityRank: string[];
-  /** Department that owns the core pain (used by contact department_relevance axis). */
-  corePainDepartment: string;
-  comparableAxes: ComparableAxis<DirectoryEntry>[];
   contactComparableAxes: ComparableAxis<ContactEntry>[];
 }
 
@@ -96,6 +111,23 @@ type DirectoryRowInsert = {
   hidden_claim: string | null;
   entry_type: EntryType;
   is_active: boolean;
+  in_data_room: boolean;
+  vertical: string;
+  locations: number;
+  metro: string;
+  in_territory: boolean;
+  size_note: string;
+  online_booking: boolean;
+  blurb: string;
+  public_signals: string[];
+  research_facts: string[];
+  class: CompanyClass;
+  subtype: string | null;
+  fit_rank: number | null;
+  trigger_quality: TriggerQuality;
+  keyed_trigger: string | null;
+  best_contact: string | null;
+  why: string | null;
 };
 
 type ContactRowInsert = {
@@ -114,18 +146,29 @@ type CompetitorWithAxes = {
   weakerAxis: string;
 };
 
-const FILLER_SIGNAL_HINTS = [
-  "Steady operations with no notable public updates recently.",
-  "Maintains a typical appointment volume for its market.",
-  "No major staffing or expansion news reported lately.",
-  "Continues routine patient scheduling through existing processes.",
-  "Limited public information on recent operational changes.",
+export type GenerationReport = {
+  warnings: string[];
+  countsByClass: Record<CompanyClass, number>;
+  countsBySubtype: Record<string, number>;
+};
+
+const GENERATION_RETRY_MAX = 80;
+const NAME_COLLISION_QUALIFIERS = ["West", "East", "North", "South", "Central"];
+
+const NEAR_MISS_SUBTYPES: NearMissSubtype[] = [
+  "too_small",
+  "no_strain",
+  "adjacent_vertical",
+  "too_big",
+  "out_of_territory",
 ];
 
-const FILLER_GUARD_RETRY_MAX = 10;
-
-/** Appended to a suffix as a last-resort tiebreaker when rerolls keep colliding. */
-const NAME_COLLISION_QUALIFIERS = ["West", "East", "North", "South", "Central"];
+const TRAP_SUBTYPES: TrapSubtype[] = [
+  "already_solved",
+  "franchise_power",
+  "contracting",
+  "phantom_fit",
+];
 
 /**
  * Picks a random element from a non-empty array.
@@ -134,99 +177,55 @@ function pickRandom<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)] as T;
 }
 
-/** Parses the leading integer from a free-text comparable value. */
-export function parseSizeNumber(valueText: string): number | null {
-  const match = valueText.trim().match(/^(\d+)/);
-  if (!match) {
-    return null;
-  }
-  const value = Number.parseInt(match[1], 10);
-  return Number.isFinite(value) ? value : null;
-}
-
 /**
- * Resolves the primary contact title used by company-level seniority comparisons.
- * Designed companies read from contactSet.correct; fillers use inline contactTitle.
+ * Normalizes company names for uniqueness checks (R6).
  */
-export function resolvePrimaryContactTitle(
-  entry: DirectoryEntry | DesignedDirectoryEntry
-): string {
-  if ("contactSet" in entry && entry.contactSet) {
-    return entry.contactSet.correct.contactTitle;
-  }
-  return entry.contactTitle ?? "";
+export function normalizeCompanyName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 /**
- * Applies every configured company axis cap to one filler candidate.
- * Axes without usable values or regeneration strategies degrade with a warning.
+ * Maps a vertical slug to a display industry label for legacy columns.
  */
-function applyComparableAxisCaps(
-  candidate: DirectoryEntry,
-  config: DirectoryConfig
-): DirectoryEntry {
-  let cappedCandidate = candidate;
-
-  for (const axis of config.comparableAxes) {
-    const targetValue = axis.getValue(config.target, config);
-    let fillerValue = axis.getValue(cappedCandidate, config);
-
-    if (targetValue === null || fillerValue === null) {
-      console.warn(
-        `[generate-prospect-directory] Skipping axis "${axis.name}" for filler "${candidate.companyName}" because its target or filler value is unavailable.`
-      );
-      continue;
-    }
-    if (fillerValue < targetValue) {
-      continue;
-    }
-    if (!axis.regenerateFillerValue) {
-      console.warn(
-        `[generate-prospect-directory] Axis "${axis.name}" cannot cap filler "${candidate.companyName}" because no regeneration strategy is configured.`
-      );
-      continue;
-    }
-
-    let isCapped = false;
-    for (let attempt = 0; attempt < FILLER_GUARD_RETRY_MAX; attempt += 1) {
-      cappedCandidate = {
-        ...cappedCandidate,
-        ...axis.regenerateFillerValue(config),
-      };
-      fillerValue = axis.getValue(cappedCandidate, config);
-      if (fillerValue === null) {
-        console.warn(
-          `[generate-prospect-directory] Skipping axis "${axis.name}" for filler "${candidate.companyName}" because regeneration produced an unavailable value.`
-        );
-        isCapped = true;
-        break;
-      }
-      if (fillerValue < targetValue) {
-        isCapped = true;
-        break;
-      }
-    }
-
-    if (!isCapped) {
-      console.warn(
-        `[generate-prospect-directory] Axis "${axis.name}" remained at or above its target value for filler "${candidate.companyName}" after ${FILLER_GUARD_RETRY_MAX} attempts.`
-      );
-    }
-  }
-
-  return cappedCandidate;
+export function verticalToIndustry(vertical: string): string {
+  const labels: Record<string, string> = {
+    dental: "Dental",
+    veterinary: "Veterinary",
+    "physical therapy": "Physical Therapy",
+    optometry: "Optometry",
+    "med spa": "Med Spa",
+    chiropractic: "Chiropractic",
+    retail: "Retail",
+    hospitality: "Hospitality",
+    "auto repair": "Auto Repair",
+    "legal services": "Legal Services",
+    "fitness studio": "Fitness Studio",
+    "property management": "Property Management",
+    "urgent care": "Urgent Care",
+  };
+  return labels[vertical.toLowerCase()] ?? vertical;
 }
 
 /**
- * Generic win-count validator: each competitor may beat the canonical subject
- * on at most one configured axis, and strongerAxis should reference that win.
- * Used for company-vs-target decoys and trap-vs-correct contacts.
+ * Converts a designed company into ICP scoring input.
+ */
+function toIcpInput(company: DesignedCompany): IcpFitCompanyInput {
+  return {
+    vertical: company.vertical,
+    locations: company.locations,
+    metro: company.metro,
+    onlineBooking: company.onlineBooking,
+  };
+}
+
+/**
+ * Generic win-count validator for designed trap contacts.
  */
 export function validateCompetitorsAgainstCanonical<TSubject>(options: {
   candidates: Array<TSubject & CompetitorWithAxes>;
   canonical: TSubject;
   axes: Array<Pick<ComparableAxis<TSubject>, "name" | "keywords" | "getValue">>;
-  config: DirectoryConfig;
+  config: TempoDirectorySeedConfig;
   labelFor: (candidate: TSubject & CompetitorWithAxes) => string;
 }): void {
   const { candidates, canonical, axes, config, labelFor } = options;
@@ -279,30 +278,23 @@ export function validateCompetitorsAgainstCanonical<TSubject>(options: {
 }
 
 /**
- * Validates crafted company decoys against the target using company-level axes.
+ * Validates designed contact sets for companies that declare them.
  */
-export function validateCraftedDecoys(config: DirectoryConfig): void {
-  validateCompetitorsAgainstCanonical({
-    candidates: config.craftedDecoys,
-    canonical: config.target,
-    axes: config.comparableAxes,
-    config,
-    labelFor: (decoy) => decoy.companyName.trim() || "(unnamed crafted decoy)",
-  });
-}
-
-/**
- * Validates each designed company's 2 trap contacts against its correct contact.
- */
-export function validateDesignedContactSets(config: DirectoryConfig): void {
-  const designedCompanies: DesignedDirectoryEntry[] = [
-    config.target,
-    ...config.craftedDecoys,
-  ];
-
-  for (const company of designedCompanies) {
+export function validateDesignedContactSets(
+  companies: DesignedCompany[],
+  config: TempoDirectorySeedConfig
+): void {
+  for (const company of companies) {
+    if (company.class !== "pass" && !company.contactSet) {
+      throw new Error(
+        `Company "${company.companyName}" (${company.class}) is missing contactSet.`
+      );
+    }
+    if (!company.contactSet) {
+      continue;
+    }
     const label = company.companyName.trim() || "(unnamed company)";
-    if (!company.contactSet?.correct) {
+    if (!company.contactSet.correct) {
       throw new Error(`Designed company "${label}" is missing contactSet.correct.`);
     }
     if (!Array.isArray(company.contactSet.traps) || company.contactSet.traps.length !== 2) {
@@ -323,115 +315,590 @@ export function validateDesignedContactSets(config: DirectoryConfig): void {
 }
 
 /**
- * Maps a config entry into a crm_prospect_directory insert row.
- * Contact people live in crm_prospect_contacts, not on the company row.
+ * Builds a unique company name from prefix/suffix pools.
  */
-function toInsertRow(
-  simulationId: string,
-  entry: DirectoryEntry | DesignedDirectoryEntry,
-  entryType: EntryType
-): DirectoryRowInsert {
-  return {
-    simulation_id: simulationId,
-    company_name: entry.companyName,
-    industry: entry.industry,
-    size_locations: entry.sizeLocations,
-    signal_hint: entry.signalHint?.trim() ?? "",
-    hidden_claim: entry.hiddenClaim?.trim() ? entry.hiddenClaim.trim() : null,
-    entry_type: entryType,
-    is_active: true,
-  };
-}
-
-/**
- * Builds a filler company name guaranteed not to collide with usedNames.
- */
-function buildUniqueFillerCompanyName(
-  config: DirectoryConfig,
-  suffixes: readonly string[],
+function buildUniqueCompanyName(
+  prefix: string,
+  suffix: string,
   usedNames: ReadonlySet<string>
 ): string {
-  let suffix = pickRandom(suffixes);
-  let candidate = `${pickRandom(config.namePrefixPool)} ${suffix}`;
-
-  for (let attempt = 0; attempt < FILLER_GUARD_RETRY_MAX; attempt += 1) {
-    if (!usedNames.has(candidate)) {
-      return candidate;
-    }
-    if (attempt >= FILLER_GUARD_RETRY_MAX / 2) {
-      suffix = pickRandom(suffixes);
-    }
-    candidate = `${pickRandom(config.namePrefixPool)} ${suffix}`;
+  let candidate = `${prefix} ${suffix}`;
+  if (!usedNames.has(normalizeCompanyName(candidate))) {
+    return candidate;
   }
 
   for (const qualifier of NAME_COLLISION_QUALIFIERS) {
-    const qualified = `${candidate} (${qualifier})`;
-    if (!usedNames.has(qualified)) {
-      return qualified;
+    candidate = `${prefix} ${suffix} (${qualifier})`;
+    if (!usedNames.has(normalizeCompanyName(candidate))) {
+      return candidate;
     }
   }
 
-  throw new Error(
-    `Could not build a unique filler company name after ${FILLER_GUARD_RETRY_MAX} rerolls and all qualifiers (last candidate: "${candidate}").`
-  );
+  throw new Error(`Could not build a unique company name for "${prefix} ${suffix}".`);
 }
 
 /**
- * Builds one undesigned filler contact from the shared name pool + title/department pools.
+ * Builds a procedural contact set with one correct contact and two traps.
  */
-function buildFillerContact(config: DirectoryConfig): ContactEntry {
-  const person = randomPerson();
+function buildProceduralContactSet(
+  config: TempoDirectorySeedConfig,
+  bestTitle = "Director of Operations"
+): DesignedContactSet {
+  const correctPerson = randomPerson();
+  const trapOnePerson = randomPerson();
+  const trapTwoPerson = randomPerson();
+  const correct: ContactEntry = {
+    contactName: `${correctPerson.firstName} ${correctPerson.lastName}`,
+    contactTitle: bestTitle,
+    department: config.corePainDepartment,
+    gender: correctPerson.gender,
+  };
+
   return {
-    contactName: `${person.firstName} ${person.lastName}`,
-    contactTitle: pickRandom(config.contactTitlePool),
-    department: pickRandom(config.contactDepartmentPool),
-    gender: person.gender,
+    correct,
+    traps: [
+      {
+        contactName: `${trapOnePerson.firstName} ${trapOnePerson.lastName}`,
+        contactTitle: "VP of Finance",
+        department: "Finance",
+        gender: trapOnePerson.gender,
+        strongerAxis: "seniority — VP outranks the operations lead on paper",
+        weakerAxis: "wrong department — Finance does not own scheduling tooling",
+      },
+      {
+        contactName: `${trapTwoPerson.firstName} ${trapTwoPerson.lastName}`,
+        contactTitle: "Front Desk Lead",
+        department: config.corePainDepartment,
+        gender: trapTwoPerson.gender,
+        strongerAxis:
+          "department relevance — front-line role closest to scheduling friction",
+        weakerAxis: "insufficient seniority to approve a vendor purchase",
+      },
+    ],
   };
 }
 
 /**
- * Builds filler directory entries from pools in the config.
+ * Creates one procedural near-miss company for a requested subtype.
  */
-function buildFillerEntries(config: DirectoryConfig): DirectoryEntry[] {
-  const usableIndustries = config.industryPool.filter(
-    (industry) => (config.suffixByIndustry[industry] ?? []).length > 0
-  );
-  if (usableIndustries.length === 0) {
-    throw new Error("No industry in industryPool has suffixes in suffixByIndustry.");
-  }
+function buildNearMissCompany(
+  subtype: NearMissSubtype,
+  config: TempoDirectorySeedConfig,
+  usedNames: Set<string>
+): DesignedCompany {
+  for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
+    const vertical = subtype === "adjacent_vertical" ? "urgent care" : pickRandom(config.verticalPool);
+    const suffixes =
+      subtype === "adjacent_vertical"
+        ? ["Urgent Care", "Walk-In Clinic"]
+        : config.suffixByVertical[vertical] ?? ["Group"];
+    const companyName = buildUniqueCompanyName(
+      pickRandom(config.namePrefixPool),
+      pickRandom(suffixes),
+      usedNames
+    );
 
-  const usedCompanyNames = new Set<string>([
-    config.target.companyName,
-    ...config.craftedDecoys.map((decoy) => decoy.companyName),
-  ]);
+    let locations = pickRandom([4, 5, 6, 7, 8]);
+    let metro = pickRandom(config.metroPoolInTerritory);
+    let onlineBooking = false;
+    let triggerQuality: TriggerQuality = "weak";
+    let keyedTrigger: string | null = "Operational review cycle";
+    let researchFacts = ["Leadership has not prioritized scheduling changes this quarter."];
+    let publicSignals = ["Stable appointment volume with routine hiring only"];
 
-  const fillers: DirectoryEntry[] = [];
+    if (subtype === "too_small") {
+      locations = pickRandom([1, 2]);
+    } else if (subtype === "too_big") {
+      locations = pickRandom([13, 14, 15, 18]);
+    } else if (subtype === "out_of_territory") {
+      metro = pickRandom(config.metroPoolOutOfTerritory);
+    } else if (subtype === "no_strain") {
+      triggerQuality = "none";
+      keyedTrigger = null;
+      publicSignals = ["No recent expansion or front-desk hiring reported"];
+      researchFacts = ["Operations described current scheduling as steady in a trade profile."];
+    }
 
-  while (fillers.length < config.fillerCount) {
-    const industry = pickRandom(usableIndustries);
-    const suffixes = config.suffixByIndustry[industry];
-    const companyName = buildUniqueFillerCompanyName(config, suffixes, usedCompanyNames);
-    usedCompanyNames.add(companyName);
-
-    const primary = buildFillerContact(config);
-    const candidate: DirectoryEntry = {
+    const inTerritory = config.metroPoolInTerritory.includes(metro);
+    const contactSet = buildProceduralContactSet(config);
+    const company: DesignedCompany = {
       companyName,
-      industry,
-      sizeLocations: config.target.sizeLocations,
-      contactName: primary.contactName,
-      contactTitle: primary.contactTitle,
-      signalHint: pickRandom(FILLER_SIGNAL_HINTS),
-      hiddenClaim: undefined,
+      vertical,
+      locations,
+      metro,
+      inTerritory,
+      sizeNote: `${locations} location${locations === 1 ? "" : "s"}`,
+      onlineBooking,
+      blurb: `${verticalToIndustry(vertical)} operator in ${metro}.`,
+      publicSignals,
+      researchFacts,
+      class: "near_miss",
+      subtype,
+      fitRank: null,
+      triggerQuality,
+      keyedTrigger,
+      bestContact: contactSet.correct.contactName,
+      why: `Near-miss (${subtype}) — defensible but weaker than the room's top fit.`,
+      contactSet,
     };
-    fillers.push(applyComparableAxisCaps(candidate, config));
+    const score = scoreIcpFit(toIcpInput(company));
+    const failsAxisOrTrigger =
+      score.axesPassed < 4 || company.triggerQuality === "none" || company.triggerQuality === "weak";
+    if (!failsAxisOrTrigger) {
+      continue;
+    }
+
+    usedNames.add(normalizeCompanyName(companyName));
+    return company;
   }
 
-  return fillers;
+  throw new Error(`Could not build near_miss company for subtype "${subtype}".`);
 }
 
 /**
- * Builds the 3 contact insert rows for a designed company (1 correct + 2 traps).
+ * Creates one procedural trap company for a requested subtype.
  */
+function buildTrapCompany(
+  subtype: TrapSubtype,
+  config: TempoDirectorySeedConfig,
+  usedNames: Set<string>
+): DesignedCompany {
+  for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
+    const vertical = pickRandom(config.verticalPool);
+    const suffixes = config.suffixByVertical[vertical] ?? ["Group"];
+    const companyName = buildUniqueCompanyName(
+      pickRandom(config.namePrefixPool),
+      pickRandom(suffixes),
+      usedNames
+    );
+
+    const locations = pickRandom([4, 5, 6, 7, 8, 9, 10]);
+    const metro = pickRandom(config.metroPoolInTerritory);
+    let onlineBooking = false;
+    let triggerQuality: TriggerQuality = pickRandom(["strong", "weak"] as const);
+    let researchFacts: string[] = [];
+    let publicSignals = [
+      "Recent front-desk hiring push",
+      "Review mentions long hold times on phones",
+    ];
+    let keyedTrigger = "Front-desk hiring wave";
+
+    if (subtype === "already_solved") {
+      onlineBooking = true;
+      researchFacts = [
+        "Signed a multi-year agreement with a scheduling vendor last year.",
+        "IT ticket history shows a recent rollout of patient self-scheduling.",
+      ];
+      publicSignals = [
+        "Website advertises online booking",
+        "Recent marketing push for the patient portal",
+      ];
+    } else if (subtype === "franchise_power") {
+      researchFacts = [
+        "Corporate franchise office mandates approved vendor lists for all locations.",
+        "Local managers cannot purchase scheduling tools without national approval.",
+      ];
+    } else if (subtype === "contracting") {
+      researchFacts = [
+        "Finance memo cites a freeze on discretionary software spend.",
+        "Administrative headcount was reduced last quarter.",
+      ];
+      publicSignals = [
+        "Announced administrative staff reductions",
+        "Leadership memo emphasizes margin protection",
+      ];
+      triggerQuality = "strong";
+      keyedTrigger = "Administrative staff reduction";
+    } else if (subtype === "phantom_fit") {
+      researchFacts = [
+        "Expansion headline was a rebranding of an existing location, not a new site opening.",
+        "Operations lead privately noted scheduling is not a current priority.",
+      ];
+      publicSignals = [
+        "Press release about a 'new location' opening",
+        "Social post celebrating growth",
+      ];
+    }
+
+    if (researchFacts.length === 0) {
+      researchFacts = ["Hidden operational constraint not visible on the public card."];
+    }
+
+    const contactSet = buildProceduralContactSet(config);
+    const company: DesignedCompany = {
+      companyName,
+      vertical,
+      locations,
+      metro,
+      inTerritory: true,
+      sizeNote: `${locations} locations`,
+      onlineBooking,
+      blurb: `${verticalToIndustry(vertical)} group operating across ${metro}.`,
+      publicSignals,
+      researchFacts,
+      class: "trap",
+      subtype,
+      fitRank: null,
+      triggerQuality,
+      keyedTrigger,
+      bestContact: contactSet.correct.contactName,
+      why: `Trap (${subtype}) — attractive on the card, disqualifier lives in research.`,
+      contactSet,
+    };
+    const score = scoreIcpFit(toIcpInput(company));
+    const attractive =
+      score.axesPassed >= 3 &&
+      (company.triggerQuality === "strong" || company.triggerQuality === "weak");
+    if (!attractive || company.researchFacts.length === 0) {
+      continue;
+    }
+
+    usedNames.add(normalizeCompanyName(companyName));
+    return company;
+  }
+
+  throw new Error(`Could not build trap company for subtype "${subtype}".`);
+}
+
+/**
+ * Creates one procedural strong_fit company that cannot outrank Summit (R2).
+ */
+function buildSecondaryStrongFit(
+  config: TempoDirectorySeedConfig,
+  usedNames: Set<string>
+): DesignedCompany {
+  for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
+    const vertical = pickRandom(config.verticalPool);
+    const suffixes = config.suffixByVertical[vertical] ?? ["Group"];
+    const companyName = buildUniqueCompanyName(
+      pickRandom(config.namePrefixPool),
+      pickRandom(suffixes),
+      usedNames
+    );
+
+    const locations = pickRandom([4, 5, 6, 7, 9, 10]);
+    const metro = pickRandom(config.metroPoolInTerritory);
+    const triggerQuality: TriggerQuality =
+      Math.random() < 0.5 ? "weak" : pickRandom(["strong", "weak"] as const);
+    const onlineBooking = Math.random() < 0.15;
+
+    const contactSet = buildProceduralContactSet(config);
+    const company: DesignedCompany = {
+      companyName,
+      vertical,
+      locations,
+      metro,
+      inTerritory: true,
+      sizeNote: `${locations} locations`,
+      onlineBooking,
+      blurb: `${verticalToIndustry(vertical)} operator with recent operational signals.`,
+      publicSignals: [
+        "Opened a new location within the last year",
+        "Hiring front-desk coordinators",
+      ],
+      researchFacts: [
+        "Trade coverage notes scheduling pressure, but less acute than market leaders.",
+      ],
+      class: "strong_fit",
+      subtype: null,
+      fitRank: null,
+      triggerQuality,
+      keyedTrigger: "Recent location opening",
+      bestContact: contactSet.correct.contactName,
+      why: "Strong fit on paper but weaker trigger or axis coverage than Summit.",
+      contactSet,
+    };
+    const score = scoreIcpFit(toIcpInput(company));
+    const summitPerfect =
+      score.axesPassed === 4 && company.triggerQuality === "strong";
+    if (summitPerfect) {
+      continue;
+    }
+
+    usedNames.add(normalizeCompanyName(companyName));
+    return company;
+  }
+
+  throw new Error("Could not build secondary strong_fit company.");
+}
+
+/**
+ * Creates one pass-class company that fails a visible ICP axis (R3).
+ */
+function buildPassCompany(
+  config: TempoDirectorySeedConfig,
+  usedNames: Set<string>,
+  forceName?: string
+): DesignedCompany {
+  for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
+    const vertical = pickRandom(config.passVerticalPool);
+    const suffix = pickRandom(config.passSuffixPool);
+    const companyName =
+      forceName ??
+      buildUniqueCompanyName(pickRandom(config.namePrefixPool), suffix, usedNames);
+
+    const locations = pickRandom([4, 5, 6, 7, 8]);
+    const metro = pickRandom([
+      ...config.metroPoolInTerritory,
+      ...config.metroPoolOutOfTerritory,
+    ]);
+    const inTerritory = config.metroPoolInTerritory.includes(metro);
+
+    const company: DesignedCompany = {
+      companyName,
+      vertical,
+      locations,
+      metro,
+      inTerritory,
+      sizeNote: `${locations} locations`,
+      onlineBooking: Math.random() < 0.4,
+      blurb: `${verticalToIndustry(vertical)} business operating in ${metro}.`,
+      publicSignals: ["Routine operations with no notable public scheduling news"],
+      researchFacts: ["Not a core Tempo vertical for this territory exercise."],
+      class: "pass",
+      subtype: null,
+      fitRank: null,
+      triggerQuality: "none",
+      keyedTrigger: null,
+      bestContact: null,
+      why: "Fails at least one visible ICP axis.",
+      contactSet: undefined,
+    };
+
+    if (!failsVisibleIcpAxis(toIcpInput(company))) {
+      continue;
+    }
+
+    usedNames.add(normalizeCompanyName(companyName));
+    return company;
+  }
+
+  throw new Error("Could not build pass company that fails a visible ICP axis.");
+}
+
+/**
+ * Subtracts authored counts from the generation plan per class.
+ */
+export function resolveProceduralCounts(config: TempoDirectorySeedConfig): {
+  strong_fit: number;
+  near_miss: number;
+  trap: number;
+  pass: number;
+} {
+  const authoredByClass = config.authoredCompanies.reduce(
+    (acc, company) => {
+      acc[company.class] += 1;
+      return acc;
+    },
+    { strong_fit: 0, near_miss: 0, trap: 0, pass: 0 } as Record<CompanyClass, number>
+  );
+
+  return {
+    strong_fit: Math.max(0, config.generationPlan.strong_fit - authoredByClass.strong_fit),
+    near_miss: Math.max(0, config.generationPlan.near_miss - authoredByClass.near_miss),
+    trap: Math.max(0, config.generationPlan.trap - authoredByClass.trap),
+    pass: Math.max(0, config.generationPlan.pass - authoredByClass.pass),
+  };
+}
+
+/**
+ * Builds the full 64-company roster from authored + procedural slots.
+ */
+export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCompany[] {
+  const procedural = resolveProceduralCounts(config);
+  const usedNames = new Set<string>(
+    config.authoredCompanies.map((company) => normalizeCompanyName(company.companyName))
+  );
+  const companies: DesignedCompany[] = [...config.authoredCompanies];
+
+  for (let index = 0; index < procedural.strong_fit; index += 1) {
+    companies.push(buildSecondaryStrongFit(config, usedNames));
+  }
+
+  const nearMissQueue: NearMissSubtype[] = [];
+  while (nearMissQueue.length < procedural.near_miss) {
+    for (const subtype of NEAR_MISS_SUBTYPES) {
+      if (nearMissQueue.length >= procedural.near_miss) {
+        break;
+      }
+      nearMissQueue.push(subtype);
+    }
+  }
+  const outOfTerritoryCount = nearMissQueue.filter((subtype) => subtype === "out_of_territory")
+    .length;
+  if (outOfTerritoryCount < 4 && procedural.near_miss >= 4) {
+    for (let swap = 0; swap < 4 - outOfTerritoryCount; swap += 1) {
+      const replaceIndex = nearMissQueue.findIndex((subtype) => subtype === "no_strain");
+      if (replaceIndex >= 0) {
+        nearMissQueue[replaceIndex] = "out_of_territory";
+      }
+    }
+  }
+  for (const subtype of nearMissQueue) {
+    companies.push(buildNearMissCompany(subtype, config, usedNames));
+  }
+
+  const trapQueue: TrapSubtype[] = [];
+  while (trapQueue.length < procedural.trap) {
+    for (const subtype of TRAP_SUBTYPES) {
+      if (trapQueue.length >= procedural.trap) {
+        break;
+      }
+      trapQueue.push(subtype);
+    }
+  }
+  for (const subtype of trapQueue) {
+    companies.push(buildTrapCompany(subtype, config, usedNames));
+  }
+
+  for (let index = 0; index < procedural.pass; index += 1) {
+    if (index === 0) {
+      companies.push(buildPassCompany(config, usedNames, "Summit Outdoor Gear"));
+      continue;
+    }
+    companies.push(buildPassCompany(config, usedNames));
+  }
+
+  return companies;
+}
+
+/**
+ * Validates answer-key rules R1–R6. Throws on hard failures.
+ */
+export function validateAnswerKey(
+  companies: DesignedCompany[],
+  warnings: string[]
+): void {
+  const summit = companies.find((company) => company.fitRank === 1);
+  if (!summit || summit.class !== "strong_fit") {
+    throw new Error("R1 violated: exactly one strong_fit must have fit_rank 1.");
+  }
+  const rankOneCount = companies.filter((company) => company.fitRank === 1).length;
+  if (rankOneCount !== 1) {
+    throw new Error("R1 violated: fit_rank 1 must appear exactly once.");
+  }
+  if (normalizeCompanyName(summit.companyName) !== normalizeCompanyName("Summit Dental Group")) {
+    throw new Error("R1 violated: fit_rank 1 must belong to Summit Dental Group.");
+  }
+
+  const summitScore = scoreIcpFit(toIcpInput(summit));
+  for (const company of companies) {
+    if (company.class !== "strong_fit" || company.fitRank === 1) {
+      continue;
+    }
+    const score = scoreIcpFit(toIcpInput(company));
+    const matchesSummit =
+      score.axesPassed === summitScore.axesPassed &&
+      score.axesPassed === 4 &&
+      company.triggerQuality === "strong";
+    if (matchesSummit) {
+      throw new Error(
+        `R2 violated: secondary strong_fit "${company.companyName}" matches Summit on all axes with a strong trigger.`
+      );
+    }
+  }
+
+  for (const company of companies) {
+    if (company.class !== "pass") {
+      continue;
+    }
+    if (!failsVisibleIcpAxis(toIcpInput(company))) {
+      throw new Error(
+        `R3 violated: pass company "${company.companyName}" is in-vertical, in-range, and in-territory.`
+      );
+    }
+  }
+
+  for (const company of companies) {
+    if (company.class !== "near_miss") {
+      continue;
+    }
+    const score = scoreIcpFit(toIcpInput(company));
+    const defensible =
+      score.axesPassed < 4 ||
+      company.triggerQuality === "none" ||
+      company.triggerQuality === "weak";
+    if (!defensible) {
+      throw new Error(`R4 violated: near_miss "${company.companyName}" is too strong.`);
+    }
+  }
+
+  for (const company of companies) {
+    if (company.class !== "trap") {
+      continue;
+    }
+    const score = scoreIcpFit(toIcpInput(company));
+    const attractive =
+      score.axesPassed >= 3 &&
+      (company.triggerQuality === "strong" || company.triggerQuality === "weak");
+    if (!attractive) {
+      throw new Error(`R5 violated: trap "${company.companyName}" is not attractive enough.`);
+    }
+    if (company.researchFacts.length === 0) {
+      throw new Error(`R5 violated: trap "${company.companyName}" has empty research_facts.`);
+    }
+  }
+
+  const normalized = companies.map((company) => normalizeCompanyName(company.companyName));
+  const unique = new Set(normalized);
+  if (unique.size !== normalized.length) {
+    throw new Error("R6 violated: duplicate company names after normalization.");
+  }
+
+  if (companies.length !== 64) {
+    throw new Error(`Expected 64 companies, received ${companies.length}.`);
+  }
+
+  if (
+    companies.filter((company) => company.class === "strong_fit").length !== 9 ||
+    companies.filter((company) => company.class === "near_miss").length !== 16 ||
+    companies.filter((company) => company.class === "trap").length !== 7 ||
+    companies.filter((company) => company.class === "pass").length !== 32
+  ) {
+    throw new Error("Class distribution does not match 9 / 16 / 7 / 32 plan.");
+  }
+
+  warnings.push(
+    `Validated ${companies.length} companies; Summit fit_rank 1 with ${summitScore.axesPassed}/4 ICP axes and trigger "${summit.triggerQuality}".`
+  );
+}
+
+/**
+ * Maps a designed company to a database insert row.
+ */
+function toInsertRow(simulationId: string, company: DesignedCompany): DirectoryRowInsert {
+  const entryType: EntryType =
+    company.fitRank === 1 ? "target" : company.class === "trap" ? "crafted_decoy" : "filler";
+
+  return {
+    simulation_id: simulationId,
+    company_name: company.companyName,
+    industry: verticalToIndustry(company.vertical),
+    size_locations: `${company.locations} location${company.locations === 1 ? "" : "s"}`,
+    signal_hint: company.publicSignals[0] ?? "",
+    hidden_claim: null,
+    entry_type: entryType,
+    is_active: true,
+    in_data_room: true,
+    vertical: company.vertical,
+    locations: company.locations,
+    metro: company.metro,
+    in_territory: company.inTerritory,
+    size_note: company.sizeNote,
+    online_booking: company.onlineBooking,
+    blurb: company.blurb,
+    public_signals: company.publicSignals,
+    research_facts: company.researchFacts,
+    class: company.class,
+    subtype: company.subtype,
+    fit_rank: company.fitRank,
+    trigger_quality: company.triggerQuality,
+    keyed_trigger: company.keyedTrigger,
+    best_contact: company.bestContact,
+    why: company.why,
+  };
+}
+
 function buildDesignedContactRows(
   companyId: string,
   contactSet: DesignedContactSet
@@ -460,149 +927,134 @@ function buildDesignedContactRows(
   ];
 }
 
-/**
- * Builds 3 undesigned filler contact rows.
- * Choice: first contact is marked is_correct_contact=true for schema consistency
- * (exactly one "primary" per company); the other two stay false. No axis design.
- */
-function buildFillerContactRows(
-  companyId: string,
-  config: DirectoryConfig
-): ContactRowInsert[] {
-  const contacts: ContactEntry[] = [
-    buildFillerContact(config),
-    buildFillerContact(config),
-    buildFillerContact(config),
-  ];
-
-  return contacts.map((contact, index) => ({
+function buildFillerContactRows(companyId: string, config: TempoDirectorySeedConfig): ContactRowInsert[] {
+  const contacts = [randomPerson(), randomPerson(), randomPerson()];
+  return contacts.map((person, index) => ({
     company_id: companyId,
-    contact_name: contact.contactName,
-    contact_title: contact.contactTitle,
-    department: contact.department,
-    gender: contact.gender,
+    contact_name: `${person.firstName} ${person.lastName}`,
+    contact_title: pickRandom(config.contactTitlePool),
+    department: pickRandom(config.contactDepartmentPool),
+    gender: person.gender,
     is_correct_contact: index === 0,
     stronger_axis: null,
     weaker_axis: null,
   }));
 }
 
-/**
- * Replaces all contacts for the simulation's directory companies with fresh 3-contact sets.
- */
-async function syncProspectContacts(
+async function wipeSimulationDirectory(
   supabase: SupabaseClient,
-  config: DirectoryConfig,
-  directoryRows: Array<{
-    id: string;
-    company_name: string;
-    entry_type: string;
-  }>
-): Promise<number> {
-  const companyIds = directoryRows.map((row) => row.id);
-  if (companyIds.length === 0) {
-    return 0;
+  simulationId: string
+): Promise<void> {
+  const { data: companies, error } = await supabase
+    .from("crm_prospect_directory")
+    .select("id")
+    .eq("simulation_id", simulationId);
+
+  if (error) {
+    throw new Error(`Could not load existing directory rows: ${error.message}`);
   }
 
-  const { error: deleteError } = await supabase
+  const companyIds = (companies ?? []).map((row) => String(row.id));
+  if (companyIds.length === 0) {
+    return;
+  }
+
+  const { error: deleteContactsError } = await supabase
     .from("crm_prospect_contacts")
     .delete()
     .in("company_id", companyIds);
-  if (deleteError) {
-    throw new Error(`Could not clear existing contacts: ${deleteError.message}`);
+  if (deleteContactsError) {
+    throw new Error(`Could not delete existing contacts: ${deleteContactsError.message}`);
   }
 
-  const designedByName = new Map<string, DesignedDirectoryEntry>([
-    [config.target.companyName, config.target],
-    ...config.craftedDecoys.map(
-      (decoy) => [decoy.companyName, decoy] as [string, DesignedDirectoryEntry]
-    ),
-  ]);
-
-  const contactRows: ContactRowInsert[] = [];
-  for (const row of directoryRows) {
-    const designed = designedByName.get(row.company_name);
-    if (designed) {
-      contactRows.push(...buildDesignedContactRows(row.id, designed.contactSet));
-      continue;
-    }
-    contactRows.push(...buildFillerContactRows(row.id, config));
+  const { error: deleteCompaniesError } = await supabase
+    .from("crm_prospect_directory")
+    .delete()
+    .eq("simulation_id", simulationId);
+  if (deleteCompaniesError) {
+    throw new Error(`Could not delete existing directory rows: ${deleteCompaniesError.message}`);
   }
-
-  const { error: insertError } = await supabase
-    .from("crm_prospect_contacts")
-    .insert(contactRows);
-  if (insertError) {
-    throw new Error(`Contact insert failed: ${insertError.message}`);
-  }
-
-  return contactRows.length;
 }
 
 /**
- * Inserts prospect-directory rows (when empty) and always syncs 3 contacts per company.
+ * Wipes and regenerates the Tempo prospect directory for one simulation.
  */
 export async function generateProspectDirectory(
   supabase: SupabaseClient,
-  config: DirectoryConfig
-): Promise<{ insertedCompanies: number; insertedContacts: number }> {
-  validateCraftedDecoys(config);
-  validateDesignedContactSets(config);
-
-  const { count, error: countError } = await supabase
+  config: TempoDirectorySeedConfig
+): Promise<{ insertedCompanies: number; insertedContacts: number; report: GenerationReport }> {
+  const { error: schemaError } = await supabase
     .from("crm_prospect_directory")
-    .select("id", { count: "exact", head: true })
-    .eq("simulation_id", config.simulationId);
-
-  if (countError) {
-    throw new Error(`Could not check existing directory rows: ${countError.message}`);
-  }
-
-  let insertedCompanies = 0;
-  if ((count ?? 0) === 0) {
-    const fillerEntries = buildFillerEntries(config);
-    const rows: DirectoryRowInsert[] = [
-      toInsertRow(config.simulationId, config.target, "target"),
-      ...config.craftedDecoys.map((entry) =>
-        toInsertRow(config.simulationId, entry, "crafted_decoy")
-      ),
-      ...fillerEntries.map((entry) =>
-        toInsertRow(config.simulationId, entry, "filler")
-      ),
-    ];
-
-    const { error: insertError } = await supabase
-      .from("crm_prospect_directory")
-      .insert(rows);
-    if (insertError) {
-      throw new Error(`Insert failed: ${insertError.message}`);
-    }
-    insertedCompanies = rows.length;
-  } else {
-    console.log(
-      `Directory already has ${count} row(s) for simulation_id=${config.simulationId}; syncing contacts only.`
-    );
-  }
-
-  const { data: directoryRows, error: loadError } = await supabase
-    .from("crm_prospect_directory")
-    .select("id, company_name, entry_type")
-    .eq("simulation_id", config.simulationId)
-    .eq("is_active", true);
-
-  if (loadError || !directoryRows) {
+    .select("vertical")
+    .limit(1);
+  if (schemaError?.message.includes("vertical")) {
     throw new Error(
-      `Could not load directory rows for contact sync: ${loadError?.message ?? "unknown"}`
+      "Missing data-room v2 columns. Run supabase/data-room-v2-migration.sql in the Supabase SQL editor first."
     );
   }
 
-  const insertedContacts = await syncProspectContacts(supabase, config, directoryRows);
-  return { insertedCompanies, insertedContacts };
+  const warnings: string[] = [];
+  const companies = buildCompanyRoster(config);
+  validateDesignedContactSets(companies, config);
+  validateAnswerKey(companies, warnings);
+
+  await wipeSimulationDirectory(supabase, config.simulationId);
+
+  const rows = companies.map((company) => toInsertRow(config.simulationId, company));
+  const { data: inserted, error: insertError } = await supabase
+    .from("crm_prospect_directory")
+    .insert(rows)
+    .select("id, company_name, class");
+
+  if (insertError || !inserted) {
+    throw new Error(`Insert failed: ${insertError?.message ?? "unknown"}`);
+  }
+
+  const designedByName = new Map(
+    companies
+      .filter((company) => company.contactSet)
+      .map((company) => [company.companyName, company.contactSet as DesignedContactSet])
+  );
+
+  const contactRows: ContactRowInsert[] = [];
+  for (const row of inserted) {
+    const contactSet = designedByName.get(String(row.company_name));
+    if (contactSet) {
+      contactRows.push(...buildDesignedContactRows(String(row.id), contactSet));
+      continue;
+    }
+    contactRows.push(...buildFillerContactRows(String(row.id), config));
+  }
+
+  const { error: contactInsertError } = await supabase
+    .from("crm_prospect_contacts")
+    .insert(contactRows);
+  if (contactInsertError) {
+    throw new Error(`Contact insert failed: ${contactInsertError.message}`);
+  }
+
+  const countsByClass = companies.reduce(
+    (acc, company) => {
+      acc[company.class] += 1;
+      return acc;
+    },
+    { strong_fit: 0, near_miss: 0, trap: 0, pass: 0 } as Record<CompanyClass, number>
+  );
+  const countsBySubtype: Record<string, number> = {};
+  for (const company of companies) {
+    if (!company.subtype) {
+      continue;
+    }
+    countsBySubtype[company.subtype] = (countsBySubtype[company.subtype] ?? 0) + 1;
+  }
+
+  return {
+    insertedCompanies: inserted.length,
+    insertedContacts: contactRows.length,
+    report: { warnings, countsByClass, countsBySubtype },
+  };
 }
 
-/**
- * Loads NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from .env.local when unset.
- */
 function loadEnvLocalIfNeeded(): void {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return;
@@ -636,9 +1088,6 @@ function loadEnvLocalIfNeeded(): void {
   }
 }
 
-/**
- * CLI entry — imports simulation config and runs the generator once.
- */
 async function runCli(): Promise<void> {
   loadEnvLocalIfNeeded();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -653,6 +1102,11 @@ async function runCli(): Promise<void> {
   console.log(
     `Done. Inserted ${result.insertedCompanies} company row(s), synced ${result.insertedContacts} contact row(s).`
   );
+  console.log("Class counts:", result.report.countsByClass);
+  console.log("Subtype counts:", result.report.countsBySubtype);
+  for (const warning of result.report.warnings) {
+    console.warn(warning);
+  }
 }
 
 const isMain =
