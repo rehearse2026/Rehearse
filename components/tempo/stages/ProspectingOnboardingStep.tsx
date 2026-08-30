@@ -58,7 +58,7 @@ export function ProspectingOnboardingStep({
   }, [onboardingComplete, onOnboardingComplete]);
 
   return (
-    <div className="bg-surface text-on-surface font-body-md min-h-full flex items-start justify-center p-md">
+    <div className="bg-surface text-on-surface font-body-md min-h-full flex items-center justify-center p-md">
       <main className="w-full max-w-[800px] mx-auto space-y-lg">
         <header className="flex flex-col gap-sm">
           <h1 className="font-headline-lg text-headline-lg text-primary">Welcome Briefing</h1>
@@ -72,7 +72,7 @@ export function ProspectingOnboardingStep({
         </div>
 
         <section className="bg-surface-container-lowest border border-outline-variant rounded-lg shadow-sm overflow-hidden">
-          <header className="px-md pt-md pb-md border-b border-outline-variant/30">
+          <header className="px-gutter pt-gutter pb-md border-b border-outline-variant/30">
             <h2 className="font-headline-md text-headline-md text-on-surface">Reading List</h2>
             <p className="font-body-md text-body-md text-on-surface-variant mt-xs">
               Review these materials before you move on.
@@ -86,13 +86,13 @@ export function ProspectingOnboardingStep({
                     href={item.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between gap-md px-md py-md hover:bg-surface-container-low transition-colors"
+                    className="flex items-center justify-between gap-md px-gutter py-md hover:bg-surface-container-low transition-colors"
                   >
                     <span className="font-label-md text-label-md text-on-surface">{item.title}</span>
                     <MaterialIcon name="open_in_new" className="text-on-surface-variant text-[20px]" />
                   </a>
                 ) : (
-                  <div className="flex items-center justify-between gap-md px-md py-md opacity-60">
+                  <div className="flex items-center justify-between gap-md px-gutter py-md opacity-60">
                     <span className="font-label-md text-label-md text-on-surface">{item.title}</span>
                     <span className="font-label-sm text-label-sm text-on-surface-variant">Coming soon</span>
                   </div>
