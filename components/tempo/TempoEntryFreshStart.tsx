@@ -118,7 +118,7 @@ export function TempoEntryFreshStart({
       </section>
 
       {/* ASSIGNMENT & PRODUCT */}
-      <section className="bg-surface-container-low py-20">
+      <section className="bg-white py-20">
         <div className="max-w-[1100px] mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
             <div>
@@ -176,7 +176,7 @@ export function TempoEntryFreshStart({
       </section>
 
       {/* TIMELINE SECTION */}
-      <section className="bg-white py-20 overflow-hidden">
+      <section className="bg-surface-container-low py-20 overflow-hidden">
         <div className="max-w-[1100px] mx-auto px-6 lg:px-8">
           <div className="text-center mb-16">
             <div className="text-tertiary-container font-bold tracking-widest text-[12px] mb-4 uppercase">
@@ -215,7 +215,7 @@ export function TempoEntryFreshStart({
       </section>
 
       {/* SCORING & RULES */}
-      <section className="bg-surface-container-low py-20">
+      <section className="bg-white py-20">
         <div className="max-w-[1100px] mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 mb-20">
             <div>
