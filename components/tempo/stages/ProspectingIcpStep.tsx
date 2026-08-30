@@ -39,7 +39,7 @@ export function ProspectingIcpStep({
     (minLoc === null || maxLoc === null || maxLoc < minLoc);
 
   return (
-    <div className="w-full h-full min-h-full space-y-xl">
+    <div className="w-full h-full min-h-full space-y-xl p-4 lg:p-xl pb-xl">
       <h1 className="font-headline-lg text-headline-lg text-primary">Ideal Customer Profile</h1>
 
       <section className="space-y-sm">
