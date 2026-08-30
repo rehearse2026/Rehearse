@@ -14,7 +14,6 @@ import type { DataRoomCompany } from "@/app/api/student/data-room/route";
 import type { CrmLead } from "@/types";
 
 type MainTab = "documents" | "assistant";
-type CompanyViewTab = "overview" | "profile" | "news";
 
 function formatVerticalLabel(vertical: string | null): string | null {
   if (!vertical?.trim()) {
@@ -58,7 +57,6 @@ export function ProspectingDataRoom({
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("documents");
-  const [docTab, setDocTab] = useState<CompanyViewTab>("overview");
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([]);
   const [formCompany, setFormCompany] = useState<DataRoomCompany | null>(null);
   const [removingLeadId, setRemovingLeadId] = useState<string | null>(null);
@@ -161,13 +159,6 @@ export function ProspectingDataRoom({
   );
   const shortlistFull = shortlist.length >= 3;
   const selectedIsShortlisted = selected ? shortlistedIds.has(selected.id) : false;
-
-  const activeDoc = useMemo(() => {
-    if (!selected || docTab === "overview") {
-      return null;
-    }
-    return selected.documents.find((d) => d.type === docTab) ?? null;
-  }, [docTab, selected]);
 
   const handleShortlistSaved = (lead: CrmLead): void => {
     if (!formCompany) {
@@ -293,7 +284,6 @@ export function ProspectingDataRoom({
                     key={company.id}
                     type="button"
                     onClick={() => {
-                      setDocTab("overview");
                       onSelectCompany(company.id);
                     }}
                     className={`w-full text-left p-2.5 rounded-lg cursor-pointer transition-all group active:scale-[0.99] border ${
@@ -343,32 +333,15 @@ export function ProspectingDataRoom({
                 <h3 className="font-headline-md text-headline-md text-primary mb-1">
                   {selected.name}
                 </h3>
-                <p className="text-body-md text-on-surface-variant mb-3">
+                <p className="text-body-md text-on-surface-variant">
                   {selected.industry}
                   {selected.locations !== null ? ` · ${selected.locations} locations` : ` · ${selected.sizeLabel}`}
                   {selected.metro ? ` · ${selected.metro}` : ""}
                 </p>
-                <div className="inline-flex rounded-lg border border-outline-variant overflow-hidden">
-                  {(["overview", "profile", "news"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setDocTab(tab)}
-                      className={`px-4 h-9 text-label-md font-bold capitalize transition-colors ${
-                        docTab === tab
-                          ? "bg-primary-container text-on-primary"
-                          : "bg-white text-on-surface hover:bg-surface-container"
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-                {docTab === "overview" ? (
-                  <div className="space-y-lg">
+                <div className="space-y-lg">
                     {selected.blurb ? (
                       <section className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
                         <h4 className="font-headline-md text-headline-md text-on-surface mb-2">
@@ -471,21 +444,7 @@ export function ProspectingDataRoom({
                         </ul>
                       </section>
                     ) : null}
-                  </div>
-                ) : activeDoc ? (
-                  <article className="bg-white border border-outline-variant rounded-xl p-5 shadow-sm">
-                    <h4 className="font-headline-md text-headline-md text-on-surface mb-3">
-                      {activeDoc.title}
-                    </h4>
-                    <div className="text-body-md text-on-surface leading-relaxed whitespace-pre-wrap">
-                      {activeDoc.content}
-                    </div>
-                  </article>
-                ) : (
-                  <p className="text-body-md text-on-surface-variant">
-                    No document available for this view yet.
-                  </p>
-                )}
+                </div>
               </div>
 
               <div className="p-4 border-t border-outline-variant bg-surface-container-lowest shrink-0 flex flex-wrap items-center justify-between gap-3">
@@ -494,7 +453,7 @@ export function ProspectingDataRoom({
                     ? "3/3 — remove one to add another"
                     : selectedIsShortlisted
                       ? "This company is already on your shortlist."
-                      : "Shortlist up to three companies after reading their docs."}
+                      : "Shortlist up to three companies after reviewing their research."}
                 </p>
                 <button
                   type="button"
