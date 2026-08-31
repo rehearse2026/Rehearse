@@ -1,6 +1,6 @@
 # Tempo Data Room v2 — generation report
 
-Generated: 2026-08-30 (regenerated after research_facts / name-collision fix)  
+Generated: 2026-08-31 (content-quality fix: diversified facts, trap cover, trigger signature)  
 Simulation ID: `00000000-0000-0000-0000-000000000002` (Sell Tempo to Summit Dental Group)
 
 ## What changed
@@ -11,6 +11,7 @@ Simulation ID: `00000000-0000-0000-0000-000000000002` (Sell Tempo to Summit Dent
 - All companies are flagged `in_data_room = true` (full room; no 10-company subset).
 - Generator wipes **only** `crm_prospect_directory` + `crm_prospect_contacts` rows for the Tempo simulation.
 - **2026-08-30 fix:** `research_facts` count is class-independent (2–5 per company, spread within each class). Company names use an expanded pool with `CompanyNameRegistry` (no parenthetical qualifiers, max two per first word, substring rejection). Summit skim-test pair preserved.
+- **2026-08-31 fix:** Vertical-specific fact/signal pools with max-two reuse across companies; traps require 4–5 facts with exactly one disqualifier at a non-first index; target trigger signature (front-desk hiring + phone complaints) reserved for Summit only; pass names paired to verticals; regionally incongruous pass prefixes removed (e.g. Badger, Lone Star).
 
 ## Before running the generator
 
@@ -38,7 +39,7 @@ Procedural slots subtract authored entries per class. Current authored count:
 | `trap` | 2 (Northview, Golden State) | 5 |
 | `pass` | 0 | 32 |
 
-Subtype mix is procedural and validated each run. A representative local run produced:
+Subtype mix from the 2026-08-31 run:
 
 | Subtype | Count |
 |---------|------:|
@@ -69,6 +70,18 @@ Subtype mix is procedural and validated each run. A representative local run pro
 - `trigger_quality`: strong
 - `keyed_trigger`: "8th location + front-desk hiring"
 - `best_contact`: Dana Reyes
+- **Only company** allowed to carry **both** target trigger signature themes in `public_signals` (front-desk hiring + phone/hold complaints).
+
+## Content-quality rules (2026-08-31)
+
+| Rule | Enforcement |
+|------|-------------|
+| **Target trigger signature** | Config-driven `targetTriggerSignatureThemes`; no non-target may match more than one theme across `public_signals` (throws) |
+| **Trap cover** | Traps: min 4 `research_facts`, exactly one disqualifier-themed fact, disqualifier not at index 0 |
+| **Fact diversity** | Vertical-specific pools; no sentence in more than 2 companies; no duplicate themes within one company |
+| **Signal diversity** | Same max-two reuse rule for procedural `public_signals` |
+| **Vertical consistency** | Facts drawn only from the company's vertical pool (no `_default` retail filler on property companies) |
+| **Pass naming** | `passSuffixByVertical` pairs suffix to vertical; Mountain West–plausible prefixes only |
 
 ## Answer-key rules enforced (hard failures)
 
@@ -78,19 +91,19 @@ Subtype mix is procedural and validated each run. A representative local run pro
 | **R2** | No other `strong_fit` may match Summit on all four ICP axes **and** carry a `strong` trigger |
 | **R3** | Every `pass` fails at least one **visible** axis (vertical, 3–12 locations, or territory) |
 | **R4** | Every `near_miss` fails ≥1 ICP axis **or** has `weak`/`none` trigger |
-| **R5** | Every `trap` passes ≥3 ICP axes, has `strong`/`weak` trigger, and non-empty `research_facts` |
+| **R5** | Every `trap` passes ≥3 ICP axes, has `strong`/`weak` trigger, and ≥4 non-empty `research_facts` with one disqualifier |
 | **R6** | Company names unique under case-insensitive normalized comparison; no parenthetical qualifiers; no normalized substring pairs; no first word more than twice; exactly two names begin with `Summit` |
-| **R7** | Every company has 2–5 `research_facts`; each class shows a spread across counts 2–5 (not a single value) |
+| **R7** | Every company has 2–5 `research_facts` (traps: 4–5 only); each class shows a spread across allowed counts |
 
-## research_facts distribution (post-fix, 2026-08-30 run)
+## research_facts distribution (2026-08-31 run)
 
-Count is drawn from the same 2–5 spread for every class. Trap disqualifiers are one fact among several, at a random index.
+Traps use 4–5 only; other classes use 2–5.
 
 | class | facts=2 | facts=3 | facts=4 | facts=5 |
 |-------|--------:|--------:|--------:|--------:|
 | `strong_fit` | 3 | 2 | 2 | 2 |
 | `near_miss` | 4 | 4 | 4 | 4 |
-| `trap` | 2 | 2 | 2 | 1 |
+| `trap` | 0 | 0 | 4 | 3 |
 | `pass` | 8 | 8 | 8 | 8 |
 
 ```sql
@@ -100,25 +113,62 @@ WHERE simulation_id = '00000000-0000-0000-0000-000000000002'
 GROUP BY 1, 2 ORDER BY 1, 2;
 ```
 
-## Company name rules (post-fix)
+## Trap disqualifier audit (2026-08-31 run)
 
-- `CompanyNameRegistry` rejects parenthetical qualifiers — pool expansion replaces the old `(West)` fallback (which now throws).
-- No first word appears more than twice; `Summit` appears exactly twice (`Summit Dental Group`, `Summit Outdoor Gear`).
-- No normalized name is a substring of another (protects fuzzy lead matching).
+Each trap has exactly one disqualifier-themed fact (not first).
 
-```sql
--- First words with count > 2 (expect 0 rows)
-SELECT split_part(company_name,' ',1), COUNT(*)
-FROM crm_prospect_directory
-WHERE simulation_id = '00000000-0000-0000-0000-000000000002'
-GROUP BY 1 HAVING COUNT(*) > 2;
+| Company | Subtype | Disqualifier fact |
+|---------|---------|-------------------|
+| Northview Family Dentistry | `already_solved` | Operations team standardized on SlotEasy eighteen months ago with a multi-year agreement. |
+| Golden State Dental Alliance | `contracting` | Internal memo leaked to a trade blog cites a freeze on discretionary vendor projects through next fiscal year. |
+| Meadowbrook Chiropractic Center | `already_solved` | Signed a multi-year agreement with a scheduling vendor last year. |
+| Ember Rehab Partners | `franchise_power` | Corporate franchise office mandates approved vendor lists for all locations. |
+| Peregrine Aesthetics | `contracting` | Finance memo cites a freeze on discretionary software spend. |
+| Indigo Chiropractic Center | `phantom_fit` | Expansion headline was a rebranding of an existing location, not a new site opening. |
+| Hawthorne Rehab Partners | `already_solved` | Signed a multi-year agreement with a scheduling vendor last year. |
+
+## Fact and signal reuse (2026-08-31 run)
+
+| Metric | Result |
+|--------|--------|
+| Most-reused research fact | "Instagram story featured staff volunteering at a health fair." — **2 companies** |
+| Facts appearing in >2 companies | **0** |
+| Public signals appearing in >2 companies | **0** (enforced at generation) |
+
+Prior run had heavy reuse (e.g. "Local business journal ran a short profile on community involvement." in 4+ companies); expanded vertical pools eliminated that pattern.
+
+## franchise_power trap public_signals (2026-08-31 run)
+
+Company: **Ember Rehab Partners** (replaces prior Cedar Grove Vision Group collision in this seed draw).
+
+```json
+[
+  "Press coverage of a new flagship location opening",
+  "Google review theme: consistent care quality across locations",
+  "Chamber feature on multi-market expansion"
+]
 ```
 
-First-word collision groups with count = 2 in the 2026-08-30 run: **Summit only** (deliberate skim-test). All other first words appear once.
+No front-desk hiring + phone-hold pairing. Disqualifier remains corporate vendor control in `research_facts`.
+
+## Target trigger signature check
+
+```text
+Dual trigger signature violations (non-target with both themes): 0
+```
+
+Only Summit Dental Group matches both `front_desk_hiring` and `phone_hold_complaints` themes in `public_signals`.
+
+## Company name rules
+
+- `CompanyNameRegistry` rejects parenthetical qualifiers.
+- No first word appears more than twice; `Summit` appears exactly twice (`Summit Dental Group`, `Summit Outdoor Gear`).
+- Pass prefixes reviewed for Mountain West plausibility (removed Badger, Lone Star, Kodiak, Yosemite, etc.).
+- `passSuffixByVertical` pairs suffix to pass vertical (e.g. Properties + property management).
 
 ## Contact names
 
-Procedural contacts use `randomUniquePerson()` with a per-generation registry (authored contacts registered first). The 40×40 person-name pool is sufficient when uniqueness is enforced at generation time — **0 duplicate full names** across 192 contacts in the post-fix run. Pool expansion was not required.
+Procedural contacts use `randomUniquePerson()` with a per-generation registry (authored contacts registered first). **0 duplicate full names** across 192 contacts in the post-fix run.
 
 ## Warn-level checks (non-fatal)
 
@@ -151,11 +201,14 @@ where simulation_id = '00000000-0000-0000-0000-000000000002'
   and locations between 3 and 12
   and in_territory is true;
 
--- R5: traps must have research_facts
-select company_name from crm_prospect_directory
+-- Trap fact counts (expect all >= 4)
+select company_name, jsonb_array_length(research_facts)
+from crm_prospect_directory
 where simulation_id = '00000000-0000-0000-0000-000000000002'
-  and class = 'trap'
-  and (research_facts is null or jsonb_array_length(research_facts) = 0);
+  and class = 'trap';
+
+-- Fact reuse (>2 companies per sentence — expect 0 rows)
+-- (run in app after unnesting research_facts)
 
 -- Contacts: 3 per company
 select d.company_name, count(c.id) as contacts
@@ -178,12 +231,16 @@ Run: `npx tsx lib/tempo-prospect-directory.test.ts`
 
 `Summit Outdoor Gear` (retail, 6 locations) is authored procedurally as the first `pass` row — wrong vertical by design.
 
-## Verification results (2026-08-30 post-fix run)
+## Verification results (2026-08-31 run)
 
 | Check | Result |
 |-------|--------|
+| Non-target dual trigger signature | **0 violations** |
+| Trap fact count ≥ 4 | **Pass** (4 traps at 4 facts, 3 at 5) |
+| One disqualifier per trap | **Pass** (manual audit above) |
+| Fact sentence reuse >2 | **0** |
 | Fact spread within every class | Pass |
-| No row with &lt; 2 facts | Pass |
+| No row with &lt; 2 facts (traps ≥ 4) | Pass |
 | First words &gt; 2 | 0 rows |
 | `Summit` count | 2 |
 | Names containing `(` | 0 |
@@ -193,10 +250,11 @@ Run: `npx tsx lib/tempo-prospect-directory.test.ts`
 | Class distribution | 9 / 16 / 7 / 32 |
 | Contacts per company | 3 each, 1 `is_correct_contact` |
 | `crm_prospect_documents` | 0 rows (untouched) |
+| `app/api/student/data-room-chat/route.ts` | Unchanged |
 | `npm run build` | Pass |
 
-Guardrail warnings emitted: none (one informational validation line: Summit fit_rank 1 with 4/4 ICP axes and strong trigger).
+Guardrail warnings emitted: none (informational: Summit fit_rank 1 with 4/4 ICP axes and strong trigger).
 
 ## Rules that could not be satisfied
 
-None in local roster validation. Remote generator run requires the v2 migration to be applied first (schema preflight checks for `vertical` column).
+None in local roster validation.

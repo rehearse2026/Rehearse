@@ -79,6 +79,16 @@ export interface ComparableAxis<TSubject> {
   getValue: (subject: TSubject, config: TempoDirectorySeedConfig) => number | null;
 }
 
+export type FactPoolEntry = {
+  text: string;
+  theme: string;
+};
+
+export type TriggerSignatureTheme = {
+  id: string;
+  matchers: string[];
+};
+
 export interface TempoDirectorySeedConfig {
   simulationId: string;
   authoredCompanies: DesignedCompany[];
@@ -89,6 +99,16 @@ export interface TempoDirectorySeedConfig {
     pass: number;
   };
   corePainDepartment: string;
+  /** Target-only: no other company may match more than one theme across public_signals. */
+  targetTriggerSignatureThemes: TriggerSignatureTheme[];
+  /** Per-vertical research fact pool with theme tags for within-company dedup. */
+  researchFactsByVertical: Record<string, FactPoolEntry[]>;
+  /** Per-vertical public signal pool for procedural generation. */
+  publicSignalsByVertical: Record<string, string[]>;
+  /** Trap-subtype public signals that avoid the target trigger signature pair. */
+  publicSignalsByTrapSubtype: Record<TrapSubtype, string[]>;
+  /** Keywords that identify disqualifier-themed facts for trap validation. */
+  disqualifierKeywordsByTrapSubtype: Record<TrapSubtype, string[]>;
   verticalPool: string[];
   metroPoolInTerritory: string[];
   metroPoolOutOfTerritory: string[];
@@ -97,7 +117,7 @@ export interface TempoDirectorySeedConfig {
   nameDescriptorPool: string[];
   passPrefixPool: string[];
   suffixByVertical: Record<string, string[]>;
-  passSuffixPool: string[];
+  passSuffixByVertical: Record<string, string[]>;
   contactTitlePool: string[];
   contactDepartmentPool: string[];
   contactTitleSeniorityRank: string[];
@@ -154,11 +174,17 @@ export type GenerationReport = {
   warnings: string[];
   countsByClass: Record<CompanyClass, number>;
   countsBySubtype: Record<string, number>;
+  mostReusedFact: { sentence: string; count: number } | null;
+  mostReusedSignal: { sentence: string; count: number } | null;
+  factReuseViolations: Array<{ sentence: string; count: number }>;
+  signalReuseViolations: Array<{ sentence: string; count: number }>;
 };
 
 const GENERATION_RETRY_MAX = 80;
 const MAX_FIRST_WORD_OCCURRENCES = 2;
 const SUMMIT_FIRST_WORD = "summit";
+const MAX_SENTENCE_REUSE_ACROSS_COMPANIES = 2;
+const TRAP_MIN_RESEARCH_FACTS = 4;
 
 const TRAP_DISQUALIFIER_BY_SUBTYPE: Record<TrapSubtype, string> = {
   already_solved:
@@ -224,19 +250,21 @@ function shuffle<T>(items: readonly T[]): T[] {
 
 /**
  * Builds a per-class spread of fact counts in [2, 5] with at least one of each
- * when the class has four or more companies.
+ * when the class has four or more companies. Traps use [4, 5] only.
  */
-export function spreadFactCounts(classSize: number): number[] {
+export function spreadFactCounts(classSize: number, companyClass?: CompanyClass): number[] {
   if (classSize <= 0) {
     return [];
   }
+  const cycle =
+    companyClass === "trap" ? ([4, 5] as const) : ([2, 3, 4, 5] as const);
   const counts: number[] = [];
-  const cycle = [2, 3, 4, 5];
   while (counts.length < classSize) {
     counts.push(cycle[counts.length % cycle.length] as number);
   }
-  if (classSize >= 4) {
-    for (let index = 0; index < 4; index += 1) {
+  const spreadWidth = companyClass === "trap" ? 2 : 4;
+  if (classSize >= spreadWidth) {
+    for (let index = 0; index < spreadWidth; index += 1) {
       if (!counts.includes(cycle[index] as number)) {
         counts[index] = cycle[index] as number;
       }
@@ -245,106 +273,170 @@ export function spreadFactCounts(classSize: number): number[] {
   return shuffle(counts);
 }
 
-const NEUTRAL_RESEARCH_FACTS: Record<string, string[]> = {
-  dental: [
-    "Careers page lists hygienist openings at two locations.",
-    "Google reviews praise friendly staff with occasional wait-time mentions.",
-    "Local newsletter profiled the practice's community outreach program.",
-    "Website highlights same-day emergency appointment availability.",
-    "Patient forum threads discuss parking at the downtown location.",
-  ],
-  veterinary: [
-    "Job board shows a part-time receptionist role at the north clinic.",
-    "Yelp reviews mention compassionate care and weekend hours.",
-    "Press release covered a pet adoption event hosted at one location.",
-    "Social posts show updated signage after a minor lobby renovation.",
-    "Trade blog noted the group's partnership with a regional animal shelter.",
-  ],
-  "physical therapy": [
-    "Careers site advertises a new patient coordinator role.",
-    "Reviews cite short intake paperwork and helpful front-desk staff.",
-    "Clinic blog published tips for post-surgery rehab at home.",
-    "Local paper mentioned expanded evening appointment blocks.",
-    "Website lists insurance partners accepted at all sites.",
-  ],
-  optometry: [
-    "Indeed listing seeks an optical sales associate.",
-    "Google reviews highlight frame selection and quick eye exams.",
-    "Facebook post promoted a back-to-school vision screening drive.",
-    "Website advertises walk-in adjustments for eyeglass fittings.",
-    "Chamber of commerce spotlighted the group's downtown storefront.",
-  ],
-  "med spa": [
-    "Instagram campaign featured seasonal skincare packages.",
-    "Reviews praise consultative staff and spa-like waiting areas.",
-    "Hiring page lists a front-desk coordinator for the flagship studio.",
-    "Local lifestyle magazine included the brand in a wellness roundup.",
-    "Website FAQ notes online intake forms for first-time clients.",
-  ],
-  chiropractic: [
-    "Careers page lists a chiropractic assistant opening.",
-    "Reviews mention convenient parking and flexible morning hours.",
-    "Blog post explained the group's approach to sports injury rehab.",
-    "Community calendar listed a free posture workshop at one clinic.",
-    "Website promotes new-patient specials without mentioning scheduling tools.",
-  ],
-  retail: [
-    "Store locator shows six locations across the Mountain West.",
-    "Indeed posts highlight seasonal floor staff hiring.",
-    "Local business journal covered a holiday inventory expansion.",
-    "Google reviews mention helpful associates and easy returns.",
-    "Facebook event promoted a warehouse sale at the flagship store.",
-  ],
-  hospitality: [
-    "Travel blog review praised renovated guest rooms and lobby Wi-Fi.",
-    "Indeed listing seeks a night front-desk supervisor.",
-    "TripAdvisor thread discusses breakfast buffet hours.",
-    "Press mention covered a summer patio reopening.",
-    "Website advertises group booking discounts for corporate retreats.",
-  ],
-  "auto repair": [
-    "Google reviews cite transparent estimates and shuttle service.",
-    "Careers page lists a service advisor trainee role.",
-    "Local radio spot promoted a fall maintenance special.",
-    "Website shows Saturday hours at two neighborhood shops.",
-    "Chamber directory notes ASE-certified technicians on staff.",
-  ],
-  "legal services": [
-    "Firm blog published a guide to small-business contract basics.",
-    "LinkedIn post announced an associate attorney hire.",
-    "Website lists practice areas without operational software mentions.",
-    "Google reviews mention responsive paralegal support.",
-    "Bar association newsletter featured the firm's pro-bono clinic.",
-  ],
-  "fitness studio": [
-    "Instagram promoted a six-week beginner strength program.",
-    "Indeed listing seeks part-time front-desk staff for early shifts.",
-    "Google reviews highlight clean facilities and class variety.",
-    "Local magazine listed the studio in a best-of fitness roundup.",
-    "Website shows class schedules and intro membership offers.",
-  ],
-  "property management": [
-    "Careers page lists a leasing coordinator for a portfolio of units.",
-    "Google reviews mention responsive maintenance ticketing.",
-    "Press release covered acquisition of a twelve-unit apartment block.",
-    "Website FAQ describes tenant portal features for rent payments.",
-    "Local real-estate blog profiled the firm's resident events program.",
-  ],
-  "urgent care": [
-    "Website lists wait-time estimates by location on weekends.",
-    "Indeed post seeks medical receptionists for evening shifts.",
-    "Google reviews mention short visits for minor injuries.",
-    "Health-system partnership press release noted shared branding.",
-    "Patient forum discussed parking at the newest walk-in clinic.",
-  ],
-  _default: [
-    "Careers page shows routine front-office hiring.",
-    "Google reviews mention friendly staff and predictable hours.",
-    "Local business journal ran a short profile on community involvement.",
-    "Website highlights customer service policies and location hours.",
-    "Social media posts focus on seasonal promotions rather than operations.",
-  ],
-};
+/**
+ * Tracks sentence reuse across all companies (facts and public signals).
+ */
+class SentenceUsageRegistry {
+  private readonly counts = new Map<string, number>();
+
+  canUse(sentence: string): boolean {
+    const key = sentence.trim().toLowerCase();
+    return (this.counts.get(key) ?? 0) < MAX_SENTENCE_REUSE_ACROSS_COMPANIES;
+  }
+
+  register(sentence: string): void {
+    const key = sentence.trim().toLowerCase();
+    this.counts.set(key, (this.counts.get(key) ?? 0) + 1);
+  }
+
+  violations(): Array<{ sentence: string; count: number }> {
+    return Array.from(this.counts.entries())
+      .filter(([, count]) => count > MAX_SENTENCE_REUSE_ACROSS_COMPANIES)
+      .map(([sentence, count]) => ({ sentence, count }));
+  }
+
+  mostReused(): { sentence: string; count: number } | null {
+    let best: { sentence: string; count: number } | null = null;
+    for (const [sentence, count] of Array.from(this.counts.entries())) {
+      if (!best || count > best.count) {
+        best = { sentence, count };
+      }
+    }
+    return best;
+  }
+
+  reset(): void {
+    this.counts.clear();
+  }
+}
+
+const globalFactUsage = new SentenceUsageRegistry();
+const globalSignalUsage = new SentenceUsageRegistry();
+
+function textMatchesAny(text: string, matchers: readonly string[]): boolean {
+  const lower = text.toLowerCase();
+  return matchers.some((matcher) => lower.includes(matcher.toLowerCase()));
+}
+
+export function countMatchedTriggerThemes(
+  signals: readonly string[],
+  themes: readonly TriggerSignatureTheme[]
+): number {
+  const matched = new Set<string>();
+  for (const theme of themes) {
+    if (signals.some((signal) => textMatchesAny(signal, theme.matchers))) {
+      matched.add(theme.id);
+    }
+  }
+  return matched.size;
+}
+
+function factMatchesDisqualifierTheme(
+  fact: string,
+  subtype: TrapSubtype,
+  config: TempoDirectorySeedConfig
+): boolean {
+  const keywords = config.disqualifierKeywordsByTrapSubtype[subtype] ?? [];
+  return textMatchesAny(fact, keywords);
+}
+
+function allocateResearchFacts(
+  company: DesignedCompany,
+  count: number,
+  existing: readonly string[],
+  config: TempoDirectorySeedConfig,
+  excludeDisqualifierThemes = false,
+  disqualifierSubtype?: TrapSubtype
+): string[] {
+  const pool = config.researchFactsByVertical[company.vertical];
+  if (!pool || pool.length === 0) {
+    throw new Error(
+      `No research fact pool for vertical "${company.vertical}". Expand researchFactsByVertical.`
+    );
+  }
+
+  const usedTexts = new Set(existing.map((fact) => fact.trim().toLowerCase()));
+  const usedThemes = new Set<string>();
+  for (const fact of existing) {
+    const entry = pool.find((item) => item.text.trim().toLowerCase() === fact.trim().toLowerCase());
+    if (entry) {
+      usedThemes.add(entry.theme);
+    }
+  }
+
+  const picked: string[] = [];
+  for (const entry of shuffle(pool)) {
+    if (picked.length >= count) {
+      break;
+    }
+    const key = entry.text.trim().toLowerCase();
+    if (usedTexts.has(key) || usedThemes.has(entry.theme)) {
+      continue;
+    }
+    if (!globalFactUsage.canUse(entry.text)) {
+      continue;
+    }
+    if (
+      excludeDisqualifierThemes &&
+      disqualifierSubtype &&
+      factMatchesDisqualifierTheme(entry.text, disqualifierSubtype, config)
+    ) {
+      continue;
+    }
+    picked.push(entry.text);
+    usedTexts.add(key);
+    usedThemes.add(entry.theme);
+    globalFactUsage.register(entry.text);
+  }
+
+  if (picked.length < count) {
+    throw new Error(
+      `Research fact pool for "${company.vertical}" too small for ${count} themed facts (got ${picked.length}).`
+    );
+  }
+
+  return picked;
+}
+
+function allocatePublicSignals(
+  pool: readonly string[],
+  count: number,
+  existing: readonly string[] = []
+): string[] {
+  const used = new Set(existing.map((signal) => signal.trim().toLowerCase()));
+  const picked: string[] = [...existing];
+  for (const signal of shuffle(pool)) {
+    if (picked.length >= count) {
+      break;
+    }
+    const key = signal.trim().toLowerCase();
+    if (used.has(key) || !globalSignalUsage.canUse(signal)) {
+      continue;
+    }
+    picked.push(signal);
+    used.add(key);
+    globalSignalUsage.register(signal);
+  }
+
+  if (picked.length < count) {
+    throw new Error(
+      `Public signal pool too small for ${count} signals (got ${picked.length}).`
+    );
+  }
+
+  return picked.slice(0, count);
+}
+
+function registerAuthoredSentences(companies: readonly DesignedCompany[]): void {
+  for (const company of companies) {
+    for (const fact of company.researchFacts) {
+      globalFactUsage.register(fact);
+    }
+    for (const signal of company.publicSignals) {
+      globalSignalUsage.register(signal);
+    }
+  }
+}
 
 /**
  * Tracks company-name uniqueness, first-word limits, and substring collisions.
@@ -397,49 +489,12 @@ export class CompanyNameRegistry {
 }
 
 /**
- * Picks neutral research facts that are not duplicates of existing text.
+ * Expands every company's research_facts to an assigned count; traps require 4–5.
  */
-function pickNeutralResearchFacts(
-  company: DesignedCompany,
-  count: number,
-  existing: readonly string[]
-): string[] {
-  const pool = [
-    ...(NEUTRAL_RESEARCH_FACTS[company.vertical] ?? []),
-    ...NEUTRAL_RESEARCH_FACTS._default,
-  ];
-  const used = new Set(existing.map((fact) => fact.trim().toLowerCase()));
-  const picked: string[] = [];
-  const shuffled = shuffle(pool);
-  for (const fact of shuffled) {
-    const key = fact.trim().toLowerCase();
-    if (used.has(key)) {
-      continue;
-    }
-    picked.push(fact);
-    used.add(key);
-    if (picked.length >= count) {
-      break;
-    }
-  }
-  let attempt = 0;
-  while (picked.length < count && attempt < count * 4) {
-    attempt += 1;
-    const metro = company.metro.split(",")[0] ?? company.metro;
-    const variant = `Public coverage notes steady ${verticalToIndustry(company.vertical).toLowerCase()} operations in ${metro}. (${picked.length + attempt})`;
-    const key = variant.trim().toLowerCase();
-    if (!used.has(key)) {
-      picked.push(variant);
-      used.add(key);
-    }
-  }
-  return picked;
-}
-
-/**
- * Expands every company's research_facts to an assigned count in [2, 5].
- */
-export function finalizeResearchFacts(companies: DesignedCompany[]): void {
+export function finalizeResearchFacts(
+  companies: DesignedCompany[],
+  config: TempoDirectorySeedConfig
+): void {
   const byClass = new Map<CompanyClass, DesignedCompany[]>();
   for (const company of companies) {
     const group = byClass.get(company.class) ?? [];
@@ -447,8 +502,8 @@ export function finalizeResearchFacts(companies: DesignedCompany[]): void {
     byClass.set(company.class, group);
   }
 
-  for (const [, group] of Array.from(byClass.entries())) {
-    const targets = spreadFactCounts(group.length);
+  for (const [companyClass, group] of Array.from(byClass.entries())) {
+    const targets = spreadFactCounts(group.length, companyClass);
     for (let index = 0; index < group.length; index += 1) {
       const company = group[index] as DesignedCompany;
       const targetCount = targets[index] as number;
@@ -457,17 +512,31 @@ export function finalizeResearchFacts(companies: DesignedCompany[]): void {
         (company.class === "trap" && company.subtype
           ? TRAP_DISQUALIFIER_BY_SUBTYPE[company.subtype as TrapSubtype]
           : null);
+      const trapSubtype =
+        company.class === "trap" && company.subtype
+          ? (company.subtype as TrapSubtype)
+          : undefined;
 
-      const seedFacts = company.researchFacts.filter(
+      let seedFacts = company.researchFacts.filter(
         (fact) => !disqualifier || fact.trim() !== disqualifier.trim()
       );
+      if (trapSubtype) {
+        seedFacts = seedFacts.filter(
+          (fact) => !factMatchesDisqualifierTheme(fact, trapSubtype, config)
+        );
+      }
+
       const neededNeutral = targetCount - seedFacts.length - (disqualifier ? 1 : 0);
       const padding =
         neededNeutral > 0
-          ? pickNeutralResearchFacts(company, neededNeutral, [
-              ...seedFacts,
-              ...(disqualifier ? [disqualifier] : []),
-            ])
+          ? allocateResearchFacts(
+              company,
+              neededNeutral,
+              [...seedFacts, ...(disqualifier ? [disqualifier] : [])],
+              config,
+              company.class === "trap",
+              trapSubtype
+            )
           : [];
 
       const neutralFacts = [...seedFacts, ...padding].slice(
@@ -476,7 +545,10 @@ export function finalizeResearchFacts(companies: DesignedCompany[]): void {
       );
 
       if (disqualifier) {
-        const insertAt = Math.floor(Math.random() * (neutralFacts.length + 1));
+        const insertAt =
+          company.class === "trap"
+            ? 1 + Math.floor(Math.random() * Math.max(1, neutralFacts.length))
+            : Math.floor(Math.random() * (neutralFacts.length + 1));
         company.researchFacts = [
           ...neutralFacts.slice(0, insertAt),
           disqualifier,
@@ -486,9 +558,10 @@ export function finalizeResearchFacts(companies: DesignedCompany[]): void {
         company.researchFacts = neutralFacts.slice(0, targetCount);
       }
 
-      if (company.researchFacts.length < 2 || company.researchFacts.length > 5) {
+      const minFacts = company.class === "trap" ? TRAP_MIN_RESEARCH_FACTS : 2;
+      if (company.researchFacts.length < minFacts || company.researchFacts.length > 5) {
         throw new Error(
-          `research_facts for "${company.companyName}" must be between 2 and 5 after finalize (got ${company.researchFacts.length}).`
+          `research_facts for "${company.companyName}" must be between ${minFacts} and 5 after finalize (got ${company.researchFacts.length}).`
         );
       }
     }
@@ -653,13 +726,14 @@ function buildUniqueCompanyName(
  */
 function buildUniquePassCompanyName(
   registry: CompanyNameRegistry,
-  config: TempoDirectorySeedConfig
+  config: TempoDirectorySeedConfig,
+  vertical: string
 ): string | null {
+  const suffixes = config.passSuffixByVertical[vertical] ?? ["Group"];
   const prefixes = shuffle(config.passPrefixPool);
-  const suffixes = shuffle(config.passSuffixPool);
 
   for (const prefix of prefixes) {
-    for (const suffix of suffixes) {
+    for (const suffix of shuffle(suffixes)) {
       const candidates = [`${prefix} ${suffix}`];
       for (const descriptor of shuffle(config.nameDescriptorPool)) {
         candidates.push(`${prefix} ${descriptor} ${suffix}`);
@@ -782,8 +856,11 @@ function buildNearMissCompany(
     let onlineBooking = false;
     let triggerQuality: TriggerQuality = "weak";
     let keyedTrigger: string | null = "Operational review cycle";
+    let publicSignals = allocatePublicSignals(
+      config.publicSignalsByVertical[vertical] ?? [],
+      3
+    );
     let researchFacts: string[] = [];
-    let publicSignals = ["Stable appointment volume with routine hiring only"];
 
     if (subtype === "too_small") {
       locations = pickRandom([1, 2]);
@@ -794,25 +871,16 @@ function buildNearMissCompany(
     } else if (subtype === "no_strain") {
       triggerQuality = "none";
       keyedTrigger = null;
-      publicSignals = ["No recent expansion or front-desk hiring reported"];
-      researchFacts = ["Operations described current scheduling as steady in a trade profile."];
+      publicSignals = allocatePublicSignals(
+        (config.publicSignalsByVertical[vertical] ?? []).filter(
+          (signal) =>
+            countMatchedTriggerThemes([signal], config.targetTriggerSignatureThemes) === 0
+        ),
+        3
+      );
+      researchFacts = [];
     } else {
-      researchFacts = [
-        "Leadership has not prioritized scheduling changes this quarter.",
-      ];
-    }
-
-    if (subtype === "too_small") {
-      locations = pickRandom([1, 2]);
-    } else if (subtype === "too_big") {
-      locations = pickRandom([13, 14, 15, 18]);
-    } else if (subtype === "out_of_territory") {
-      metro = pickRandom(config.metroPoolOutOfTerritory);
-    } else if (subtype === "no_strain") {
-      triggerQuality = "none";
-      keyedTrigger = null;
-      publicSignals = ["No recent expansion or front-desk hiring reported"];
-      researchFacts = ["Operations described current scheduling as steady in a trade profile."];
+      researchFacts = [];
     }
 
     const inTerritory = config.metroPoolInTerritory.includes(metro);
@@ -840,7 +908,11 @@ function buildNearMissCompany(
     const score = scoreIcpFit(toIcpInput(company));
     const failsAxisOrTrigger =
       score.axesPassed < 4 || company.triggerQuality === "none" || company.triggerQuality === "weak";
-    if (!failsAxisOrTrigger) {
+    const triggerThemes = countMatchedTriggerThemes(
+      company.publicSignals,
+      config.targetTriggerSignatureThemes
+    );
+    if (!failsAxisOrTrigger || triggerThemes > 1) {
       continue;
     }
 
@@ -878,31 +950,21 @@ function buildTrapCompany(
     let onlineBooking = false;
     let triggerQuality: TriggerQuality = pickRandom(["strong", "weak"] as const);
     let researchFacts: string[] = [];
-    let publicSignals = [
-      "Recent front-desk hiring push",
-      "Review mentions long hold times on phones",
-    ];
-    let keyedTrigger = "Front-desk hiring wave";
+    const signalPool = config.publicSignalsByTrapSubtype[subtype];
+    let publicSignals = allocatePublicSignals(signalPool, 3);
+    let keyedTrigger = "Operational growth signals";
     const trapDisqualifierFact = TRAP_DISQUALIFIER_BY_SUBTYPE[subtype];
 
     if (subtype === "already_solved") {
       onlineBooking = true;
-      publicSignals = [
-        "Website advertises online booking",
-        "Recent marketing push for the patient portal",
-      ];
+      keyedTrigger = "Portal refresh marketing push";
     } else if (subtype === "contracting") {
-      publicSignals = [
-        "Announced administrative staff reductions",
-        "Leadership memo emphasizes margin protection",
-      ];
       triggerQuality = "strong";
       keyedTrigger = "Administrative staff reduction";
     } else if (subtype === "phantom_fit") {
-      publicSignals = [
-        "Press release about a 'new location' opening",
-        "Social post celebrating growth",
-      ];
+      keyedTrigger = "Announced location opening";
+    } else if (subtype === "franchise_power") {
+      keyedTrigger = "Regional expansion coverage";
     }
 
     const contactSet = buildProceduralContactSet(config);
@@ -931,7 +993,11 @@ function buildTrapCompany(
     const attractive =
       score.axesPassed >= 3 &&
       (company.triggerQuality === "strong" || company.triggerQuality === "weak");
-    if (!attractive) {
+    const triggerThemes = countMatchedTriggerThemes(
+      company.publicSignals,
+      config.targetTriggerSignatureThemes
+    );
+    if (!attractive || triggerThemes > 1) {
       continue;
     }
 
@@ -970,6 +1036,8 @@ function buildSecondaryStrongFit(
     const onlineBooking = Math.random() < 0.15;
 
     const contactSet = buildProceduralContactSet(config);
+    const verticalSignals = config.publicSignalsByVertical[vertical] ?? [];
+    const publicSignals = allocatePublicSignals(verticalSignals, 3);
     const company: DesignedCompany = {
       companyName,
       vertical,
@@ -979,13 +1047,8 @@ function buildSecondaryStrongFit(
       sizeNote: `${locations} locations`,
       onlineBooking,
       blurb: `${verticalToIndustry(vertical)} operator with recent operational signals.`,
-      publicSignals: [
-        "Opened a new location within the last year",
-        "Hiring front-desk coordinators",
-      ],
-      researchFacts: [
-        "Trade coverage notes scheduling pressure, but less acute than market leaders.",
-      ],
+      publicSignals,
+      researchFacts: [],
       class: "strong_fit",
       subtype: null,
       fitRank: null,
@@ -998,7 +1061,11 @@ function buildSecondaryStrongFit(
     const score = scoreIcpFit(toIcpInput(company));
     const summitPerfect =
       score.axesPassed === 4 && company.triggerQuality === "strong";
-    if (summitPerfect) {
+    const triggerThemes = countMatchedTriggerThemes(
+      company.publicSignals,
+      config.targetTriggerSignatureThemes
+    );
+    if (summitPerfect || triggerThemes > 1) {
       continue;
     }
 
@@ -1021,8 +1088,7 @@ function buildPassCompany(
   for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
     const vertical = pickRandom(config.passVerticalPool);
     const companyName =
-      forceName ??
-      buildUniquePassCompanyName(registry, config);
+      forceName ?? buildUniquePassCompanyName(registry, config, vertical);
     if (!companyName) {
       continue;
     }
@@ -1033,6 +1099,7 @@ function buildPassCompany(
       ...config.metroPoolOutOfTerritory,
     ]);
     const inTerritory = config.metroPoolInTerritory.includes(metro);
+    const passSignals = config.publicSignalsByVertical[vertical] ?? [];
 
     const company: DesignedCompany = {
       companyName,
@@ -1043,7 +1110,7 @@ function buildPassCompany(
       sizeNote: `${locations} locations`,
       onlineBooking: Math.random() < 0.4,
       blurb: `${verticalToIndustry(vertical)} business operating in ${metro}.`,
-      publicSignals: ["Routine operations with no notable public scheduling news"],
+      publicSignals: allocatePublicSignals(passSignals, 2),
       researchFacts: [],
       class: "pass",
       subtype: null,
@@ -1069,7 +1136,7 @@ function buildPassCompany(
   }
 
   throw new Error(
-    "Could not build pass company that fails a visible ICP axis. If retries were exhausted due to names, expand passPrefixPool, passSuffixPool, or nameDescriptorPool."
+    "Could not build pass company that fails a visible ICP axis. If retries were exhausted due to names, expand passPrefixPool, passSuffixByVertical, or nameDescriptorPool."
   );
 }
 
@@ -1099,14 +1166,111 @@ export function resolveProceduralCounts(config: TempoDirectorySeedConfig): {
 }
 
 /**
+ * Validates target trigger signature isolation and content diversity rules.
+ */
+export function validateContentQuality(
+  companies: DesignedCompany[],
+  config: TempoDirectorySeedConfig
+): void {
+  const target = companies.find((company) => company.fitRank === 1);
+  if (!target) {
+    throw new Error("Target company with fit_rank 1 not found.");
+  }
+
+  for (const company of companies) {
+    if (company.fitRank === 1) {
+      continue;
+    }
+    const matchedThemes = countMatchedTriggerThemes(
+      company.publicSignals,
+      config.targetTriggerSignatureThemes
+    );
+    if (matchedThemes > 1) {
+      throw new Error(
+        `Target trigger signature violated: "${company.companyName}" matches ${matchedThemes} signature themes in public_signals.`
+      );
+    }
+  }
+
+  const factViolations = globalFactUsage.violations();
+  if (factViolations.length > 0) {
+    throw new Error(
+      `Fact reuse limit exceeded: ${factViolations
+        .map((item) => `"${item.sentence}" (${item.count})`)
+        .join("; ")}`
+    );
+  }
+
+  const signalViolations = globalSignalUsage.violations();
+  if (signalViolations.length > 0) {
+    throw new Error(
+      `Public signal reuse limit exceeded: ${signalViolations
+        .map((item) => `"${item.sentence}" (${item.count})`)
+        .join("; ")}`
+    );
+  }
+
+  for (const company of companies) {
+    const pool = config.researchFactsByVertical[company.vertical] ?? [];
+    const themes = new Set<string>();
+    for (const fact of company.researchFacts) {
+      const entry = pool.find((item) => item.text.trim() === fact.trim());
+      if (entry) {
+        if (themes.has(entry.theme)) {
+          throw new Error(
+            `Duplicate fact theme "${entry.theme}" within "${company.companyName}".`
+          );
+        }
+        themes.add(entry.theme);
+      }
+    }
+  }
+
+  for (const company of companies) {
+    if (company.class !== "trap" || !company.subtype) {
+      continue;
+    }
+    const subtype = company.subtype as TrapSubtype;
+    const disqualifier =
+      company.trapDisqualifierFact ?? TRAP_DISQUALIFIER_BY_SUBTYPE[subtype];
+    const disqualifierMatches = company.researchFacts.filter(
+      (fact) =>
+        fact.trim() === disqualifier.trim() ||
+        factMatchesDisqualifierTheme(fact, subtype, config)
+    );
+    if (disqualifierMatches.length !== 1) {
+      throw new Error(
+        `Trap "${company.companyName}" has ${disqualifierMatches.length} disqualifier-themed facts (expected 1).`
+      );
+    }
+    if (company.researchFacts.length < TRAP_MIN_RESEARCH_FACTS) {
+      throw new Error(
+        `Trap "${company.companyName}" has ${company.researchFacts.length} research_facts (minimum ${TRAP_MIN_RESEARCH_FACTS}).`
+      );
+    }
+    const disqualifierIndex = company.researchFacts.findIndex(
+      (fact) => fact.trim() === disqualifier.trim()
+    );
+    if (disqualifierIndex === 0) {
+      throw new Error(
+        `Trap "${company.companyName}" has disqualifier as first research_fact.`
+      );
+    }
+  }
+}
+
+/**
  * Builds the full 64-company roster from authored + procedural slots.
  */
 export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCompany[] {
+  globalFactUsage.reset();
+  globalSignalUsage.reset();
   globalUsedContactNames.clear();
   const registry = new CompanyNameRegistry();
   for (const company of config.authoredCompanies) {
     registry.registerAuthored(company.companyName);
   }
+  registerAuthoredSentences(config.authoredCompanies);
   const procedural = resolveProceduralCounts(config);
   const companies: DesignedCompany[] = [...config.authoredCompanies];
 
@@ -1159,7 +1323,8 @@ export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCo
   }
 
   registerAuthoredContactNames(companies);
-  finalizeResearchFacts(companies);
+  finalizeResearchFacts(companies, config);
+  validateContentQuality(companies, config);
   return companies;
 }
 
@@ -1238,9 +1403,9 @@ export function validateAnswerKey(
     if (company.researchFacts.length === 0) {
       throw new Error(`R5 violated: trap "${company.companyName}" has empty research_facts.`);
     }
-    if (company.researchFacts.length < 2) {
+    if (company.researchFacts.length < TRAP_MIN_RESEARCH_FACTS) {
       throw new Error(
-        `R5 violated: trap "${company.companyName}" must have at least 2 research_facts.`
+        `R5 violated: trap "${company.companyName}" must have at least ${TRAP_MIN_RESEARCH_FACTS} research_facts.`
       );
     }
   }
@@ -1297,9 +1462,10 @@ export function validateAnswerKey(
     factCountsByClass.set(company.class, group);
   }
   for (const [companyClass, lengths] of Array.from(factCountsByClass.entries())) {
-    if (lengths.some((length) => length < 2 || length > 5)) {
+    const minLength = companyClass === "trap" ? TRAP_MIN_RESEARCH_FACTS : 2;
+    if (lengths.some((length) => length < minLength || length > 5)) {
       throw new Error(
-        `research_facts count for class "${companyClass}" must stay within 2–5 (got ${lengths.join(", ")}).`
+        `research_facts count for class "${companyClass}" must stay within ${minLength}–5 (got ${lengths.join(", ")}).`
       );
     }
     if (new Set(lengths).size === 1) {
@@ -1515,7 +1681,15 @@ export async function generateProspectDirectory(
   return {
     insertedCompanies: inserted.length,
     insertedContacts: contactRows.length,
-    report: { warnings, countsByClass, countsBySubtype },
+    report: {
+      warnings,
+      countsByClass,
+      countsBySubtype,
+      mostReusedFact: globalFactUsage.mostReused(),
+      mostReusedSignal: globalSignalUsage.mostReused(),
+      factReuseViolations: globalFactUsage.violations(),
+      signalReuseViolations: globalSignalUsage.violations(),
+    },
   };
 }
 
