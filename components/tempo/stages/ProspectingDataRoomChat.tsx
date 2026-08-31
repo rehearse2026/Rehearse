@@ -217,14 +217,34 @@ export function ProspectingDataRoomChat({
     }
   };
 
+  const handleRefreshChat = (): void => {
+    setTimeline([]);
+    setChatInput("");
+    setSendError(null);
+  };
+
+  const canRefreshChat = timeline.length > 0 && !isAILoading;
+
   return (
     <section className="flex-1 flex flex-col bg-white min-h-0 overflow-hidden">
       <div className="p-4 border-b border-outline-variant bg-surface-container-low shrink-0 space-y-3">
-        <div>
-          <h3 className="font-headline-md text-headline-md text-primary">AI Assistant</h3>
-          <p className="text-body-md text-on-surface-variant">
-            Attach company documents, then ask questions grounded only in what you attached.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-headline-md text-headline-md text-primary">AI Assistant</h3>
+            <p className="text-body-md text-on-surface-variant">
+              Attach company documents, then ask questions grounded only in what you attached.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleRefreshChat}
+            disabled={!canRefreshChat}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-outline-variant bg-white text-label-sm font-bold text-on-surface hover:bg-surface-container transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            aria-label="Refresh chat"
+          >
+            <MaterialIcon name="refresh" className="text-[18px]" />
+            Refresh chat
+          </button>
         </div>
 
         <div ref={pickerRef} className="relative">
