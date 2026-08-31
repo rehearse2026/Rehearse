@@ -69,6 +69,8 @@ export interface DesignedCompany {
   bestContact: string | null;
   why: string | null;
   contactSet?: DesignedContactSet;
+  /** Trap-only: the single discoverable disqualifier merged into research_facts at finalize. */
+  trapDisqualifierFact?: string;
 }
 
 export interface ComparableAxis<TSubject> {
@@ -92,6 +94,8 @@ export interface TempoDirectorySeedConfig {
   metroPoolOutOfTerritory: string[];
   passVerticalPool: string[];
   namePrefixPool: string[];
+  nameDescriptorPool: string[];
+  passPrefixPool: string[];
   suffixByVertical: Record<string, string[]>;
   passSuffixPool: string[];
   contactTitlePool: string[];
@@ -153,7 +157,18 @@ export type GenerationReport = {
 };
 
 const GENERATION_RETRY_MAX = 80;
-const NAME_COLLISION_QUALIFIERS = ["West", "East", "North", "South", "Central"];
+const MAX_FIRST_WORD_OCCURRENCES = 2;
+const SUMMIT_FIRST_WORD = "summit";
+
+const TRAP_DISQUALIFIER_BY_SUBTYPE: Record<TrapSubtype, string> = {
+  already_solved:
+    "Signed a multi-year agreement with a scheduling vendor last year.",
+  franchise_power:
+    "Corporate franchise office mandates approved vendor lists for all locations.",
+  contracting: "Finance memo cites a freeze on discretionary software spend.",
+  phantom_fit:
+    "Expansion headline was a rebranding of an existing location, not a new site opening.",
+};
 
 const NEAR_MISS_SUBTYPES: NearMissSubtype[] = [
   "too_small",
@@ -182,6 +197,302 @@ function pickRandom<T>(items: readonly T[]): T {
  */
 export function normalizeCompanyName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+const ALLOWED_SUMMIT_NAMES = new Set(
+  ["Summit Dental Group", "Summit Outdoor Gear"].map(normalizeCompanyName)
+);
+
+/**
+ * Returns the first whitespace-delimited token of a company name.
+ */
+export function companyFirstWord(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? "";
+}
+
+/**
+ * Fisher–Yates shuffle (returns a new array).
+ */
+function shuffle<T>(items: readonly T[]): T[] {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+  return copy;
+}
+
+/**
+ * Builds a per-class spread of fact counts in [2, 5] with at least one of each
+ * when the class has four or more companies.
+ */
+export function spreadFactCounts(classSize: number): number[] {
+  if (classSize <= 0) {
+    return [];
+  }
+  const counts: number[] = [];
+  const cycle = [2, 3, 4, 5];
+  while (counts.length < classSize) {
+    counts.push(cycle[counts.length % cycle.length] as number);
+  }
+  if (classSize >= 4) {
+    for (let index = 0; index < 4; index += 1) {
+      if (!counts.includes(cycle[index] as number)) {
+        counts[index] = cycle[index] as number;
+      }
+    }
+  }
+  return shuffle(counts);
+}
+
+const NEUTRAL_RESEARCH_FACTS: Record<string, string[]> = {
+  dental: [
+    "Careers page lists hygienist openings at two locations.",
+    "Google reviews praise friendly staff with occasional wait-time mentions.",
+    "Local newsletter profiled the practice's community outreach program.",
+    "Website highlights same-day emergency appointment availability.",
+    "Patient forum threads discuss parking at the downtown location.",
+  ],
+  veterinary: [
+    "Job board shows a part-time receptionist role at the north clinic.",
+    "Yelp reviews mention compassionate care and weekend hours.",
+    "Press release covered a pet adoption event hosted at one location.",
+    "Social posts show updated signage after a minor lobby renovation.",
+    "Trade blog noted the group's partnership with a regional animal shelter.",
+  ],
+  "physical therapy": [
+    "Careers site advertises a new patient coordinator role.",
+    "Reviews cite short intake paperwork and helpful front-desk staff.",
+    "Clinic blog published tips for post-surgery rehab at home.",
+    "Local paper mentioned expanded evening appointment blocks.",
+    "Website lists insurance partners accepted at all sites.",
+  ],
+  optometry: [
+    "Indeed listing seeks an optical sales associate.",
+    "Google reviews highlight frame selection and quick eye exams.",
+    "Facebook post promoted a back-to-school vision screening drive.",
+    "Website advertises walk-in adjustments for eyeglass fittings.",
+    "Chamber of commerce spotlighted the group's downtown storefront.",
+  ],
+  "med spa": [
+    "Instagram campaign featured seasonal skincare packages.",
+    "Reviews praise consultative staff and spa-like waiting areas.",
+    "Hiring page lists a front-desk coordinator for the flagship studio.",
+    "Local lifestyle magazine included the brand in a wellness roundup.",
+    "Website FAQ notes online intake forms for first-time clients.",
+  ],
+  chiropractic: [
+    "Careers page lists a chiropractic assistant opening.",
+    "Reviews mention convenient parking and flexible morning hours.",
+    "Blog post explained the group's approach to sports injury rehab.",
+    "Community calendar listed a free posture workshop at one clinic.",
+    "Website promotes new-patient specials without mentioning scheduling tools.",
+  ],
+  retail: [
+    "Store locator shows six locations across the Mountain West.",
+    "Indeed posts highlight seasonal floor staff hiring.",
+    "Local business journal covered a holiday inventory expansion.",
+    "Google reviews mention helpful associates and easy returns.",
+    "Facebook event promoted a warehouse sale at the flagship store.",
+  ],
+  hospitality: [
+    "Travel blog review praised renovated guest rooms and lobby Wi-Fi.",
+    "Indeed listing seeks a night front-desk supervisor.",
+    "TripAdvisor thread discusses breakfast buffet hours.",
+    "Press mention covered a summer patio reopening.",
+    "Website advertises group booking discounts for corporate retreats.",
+  ],
+  "auto repair": [
+    "Google reviews cite transparent estimates and shuttle service.",
+    "Careers page lists a service advisor trainee role.",
+    "Local radio spot promoted a fall maintenance special.",
+    "Website shows Saturday hours at two neighborhood shops.",
+    "Chamber directory notes ASE-certified technicians on staff.",
+  ],
+  "legal services": [
+    "Firm blog published a guide to small-business contract basics.",
+    "LinkedIn post announced an associate attorney hire.",
+    "Website lists practice areas without operational software mentions.",
+    "Google reviews mention responsive paralegal support.",
+    "Bar association newsletter featured the firm's pro-bono clinic.",
+  ],
+  "fitness studio": [
+    "Instagram promoted a six-week beginner strength program.",
+    "Indeed listing seeks part-time front-desk staff for early shifts.",
+    "Google reviews highlight clean facilities and class variety.",
+    "Local magazine listed the studio in a best-of fitness roundup.",
+    "Website shows class schedules and intro membership offers.",
+  ],
+  "property management": [
+    "Careers page lists a leasing coordinator for a portfolio of units.",
+    "Google reviews mention responsive maintenance ticketing.",
+    "Press release covered acquisition of a twelve-unit apartment block.",
+    "Website FAQ describes tenant portal features for rent payments.",
+    "Local real-estate blog profiled the firm's resident events program.",
+  ],
+  "urgent care": [
+    "Website lists wait-time estimates by location on weekends.",
+    "Indeed post seeks medical receptionists for evening shifts.",
+    "Google reviews mention short visits for minor injuries.",
+    "Health-system partnership press release noted shared branding.",
+    "Patient forum discussed parking at the newest walk-in clinic.",
+  ],
+  _default: [
+    "Careers page shows routine front-office hiring.",
+    "Google reviews mention friendly staff and predictable hours.",
+    "Local business journal ran a short profile on community involvement.",
+    "Website highlights customer service policies and location hours.",
+    "Social media posts focus on seasonal promotions rather than operations.",
+  ],
+};
+
+/**
+ * Tracks company-name uniqueness, first-word limits, and substring collisions.
+ */
+export class CompanyNameRegistry {
+  private readonly usedNames = new Set<string>();
+  private readonly firstWordCounts = new Map<string, number>();
+
+  /**
+   * Registers an authored name that must be accepted as-is.
+   */
+  registerAuthored(name: string): void {
+    if (!this.tryRegister(name)) {
+      throw new Error(`Authored company name "${name}" violates name registry rules.`);
+    }
+  }
+
+  /**
+   * Attempts to register a candidate company name. Returns false when rejected.
+   */
+  tryRegister(name: string): boolean {
+    if (name.includes("(") || name.includes(")")) {
+      return false;
+    }
+    const normalized = normalizeCompanyName(name);
+    if (this.usedNames.has(normalized)) {
+      return false;
+    }
+    for (const existing of Array.from(this.usedNames)) {
+      if (normalized.includes(existing) || existing.includes(normalized)) {
+        return false;
+      }
+    }
+    const firstWord = companyFirstWord(name).toLowerCase();
+    if (firstWord === SUMMIT_FIRST_WORD && !ALLOWED_SUMMIT_NAMES.has(normalized)) {
+      return false;
+    }
+    const count = this.firstWordCounts.get(firstWord) ?? 0;
+    if (count >= MAX_FIRST_WORD_OCCURRENCES) {
+      return false;
+    }
+    this.usedNames.add(normalized);
+    this.firstWordCounts.set(firstWord, count + 1);
+    return true;
+  }
+
+  get size(): number {
+    return this.usedNames.size;
+  }
+}
+
+/**
+ * Picks neutral research facts that are not duplicates of existing text.
+ */
+function pickNeutralResearchFacts(
+  company: DesignedCompany,
+  count: number,
+  existing: readonly string[]
+): string[] {
+  const pool = [
+    ...(NEUTRAL_RESEARCH_FACTS[company.vertical] ?? []),
+    ...NEUTRAL_RESEARCH_FACTS._default,
+  ];
+  const used = new Set(existing.map((fact) => fact.trim().toLowerCase()));
+  const picked: string[] = [];
+  const shuffled = shuffle(pool);
+  for (const fact of shuffled) {
+    const key = fact.trim().toLowerCase();
+    if (used.has(key)) {
+      continue;
+    }
+    picked.push(fact);
+    used.add(key);
+    if (picked.length >= count) {
+      break;
+    }
+  }
+  let attempt = 0;
+  while (picked.length < count && attempt < count * 4) {
+    attempt += 1;
+    const metro = company.metro.split(",")[0] ?? company.metro;
+    const variant = `Public coverage notes steady ${verticalToIndustry(company.vertical).toLowerCase()} operations in ${metro}. (${picked.length + attempt})`;
+    const key = variant.trim().toLowerCase();
+    if (!used.has(key)) {
+      picked.push(variant);
+      used.add(key);
+    }
+  }
+  return picked;
+}
+
+/**
+ * Expands every company's research_facts to an assigned count in [2, 5].
+ */
+export function finalizeResearchFacts(companies: DesignedCompany[]): void {
+  const byClass = new Map<CompanyClass, DesignedCompany[]>();
+  for (const company of companies) {
+    const group = byClass.get(company.class) ?? [];
+    group.push(company);
+    byClass.set(company.class, group);
+  }
+
+  for (const [, group] of Array.from(byClass.entries())) {
+    const targets = spreadFactCounts(group.length);
+    for (let index = 0; index < group.length; index += 1) {
+      const company = group[index] as DesignedCompany;
+      const targetCount = targets[index] as number;
+      const disqualifier =
+        company.trapDisqualifierFact ??
+        (company.class === "trap" && company.subtype
+          ? TRAP_DISQUALIFIER_BY_SUBTYPE[company.subtype as TrapSubtype]
+          : null);
+
+      const seedFacts = company.researchFacts.filter(
+        (fact) => !disqualifier || fact.trim() !== disqualifier.trim()
+      );
+      const neededNeutral = targetCount - seedFacts.length - (disqualifier ? 1 : 0);
+      const padding =
+        neededNeutral > 0
+          ? pickNeutralResearchFacts(company, neededNeutral, [
+              ...seedFacts,
+              ...(disqualifier ? [disqualifier] : []),
+            ])
+          : [];
+
+      const neutralFacts = [...seedFacts, ...padding].slice(
+        0,
+        targetCount - (disqualifier ? 1 : 0)
+      );
+
+      if (disqualifier) {
+        const insertAt = Math.floor(Math.random() * (neutralFacts.length + 1));
+        company.researchFacts = [
+          ...neutralFacts.slice(0, insertAt),
+          disqualifier,
+          ...neutralFacts.slice(insertAt),
+        ];
+      } else {
+        company.researchFacts = neutralFacts.slice(0, targetCount);
+      }
+
+      if (company.researchFacts.length < 2 || company.researchFacts.length > 5) {
+        throw new Error(
+          `research_facts for "${company.companyName}" must be between 2 and 5 after finalize (got ${company.researchFacts.length}).`
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -315,26 +626,90 @@ export function validateDesignedContactSets(
 }
 
 /**
- * Builds a unique company name from prefix/suffix pools.
+ * Builds a unique company name from prefix/suffix pools without parenthetical fallbacks.
  */
 function buildUniqueCompanyName(
+  registry: CompanyNameRegistry,
   prefix: string,
   suffix: string,
-  usedNames: ReadonlySet<string>
-): string {
-  let candidate = `${prefix} ${suffix}`;
-  if (!usedNames.has(normalizeCompanyName(candidate))) {
-    return candidate;
+  config: TempoDirectorySeedConfig
+): string | null {
+  const candidates: string[] = [`${prefix} ${suffix}`];
+  for (const descriptor of shuffle(config.nameDescriptorPool)) {
+    candidates.push(`${prefix} ${descriptor} ${suffix}`);
   }
 
-  for (const qualifier of NAME_COLLISION_QUALIFIERS) {
-    candidate = `${prefix} ${suffix} (${qualifier})`;
-    if (!usedNames.has(normalizeCompanyName(candidate))) {
+  for (const candidate of candidates) {
+    if (registry.tryRegister(candidate)) {
       return candidate;
     }
   }
 
-  throw new Error(`Could not build a unique company name for "${prefix} ${suffix}".`);
+  return null;
+}
+
+/**
+ * Builds a unique pass-class company name from pass-specific pools.
+ */
+function buildUniquePassCompanyName(
+  registry: CompanyNameRegistry,
+  config: TempoDirectorySeedConfig
+): string | null {
+  const prefixes = shuffle(config.passPrefixPool);
+  const suffixes = shuffle(config.passSuffixPool);
+
+  for (const prefix of prefixes) {
+    for (const suffix of suffixes) {
+      const candidates = [`${prefix} ${suffix}`];
+      for (const descriptor of shuffle(config.nameDescriptorPool)) {
+        candidates.push(`${prefix} ${descriptor} ${suffix}`);
+      }
+      for (const candidate of candidates) {
+        if (registry.tryRegister(candidate)) {
+          return candidate;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+const globalUsedContactNames = new Set<string>();
+
+function normalizeContactName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Registers authored contact names so procedural generation avoids collisions.
+ */
+export function registerAuthoredContactNames(companies: DesignedCompany[]): void {
+  for (const company of companies) {
+    if (!company.contactSet) {
+      continue;
+    }
+    for (const contact of [company.contactSet.correct, ...company.contactSet.traps]) {
+      globalUsedContactNames.add(normalizeContactName(contact.contactName));
+    }
+  }
+}
+
+/**
+ * Returns a person with a globally unique full name for this generation run.
+ */
+function randomUniquePerson(): ReturnType<typeof randomPerson> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const person = randomPerson();
+    const fullName = normalizeContactName(`${person.firstName} ${person.lastName}`);
+    if (!globalUsedContactNames.has(fullName)) {
+      globalUsedContactNames.add(fullName);
+      return person;
+    }
+  }
+  throw new Error(
+    "Person name pool too small: could not allocate a unique contact full name. Expand person-name-pool.ts."
+  );
 }
 
 /**
@@ -344,9 +719,9 @@ function buildProceduralContactSet(
   config: TempoDirectorySeedConfig,
   bestTitle = "Director of Operations"
 ): DesignedContactSet {
-  const correctPerson = randomPerson();
-  const trapOnePerson = randomPerson();
-  const trapTwoPerson = randomPerson();
+  const correctPerson = randomUniquePerson();
+  const trapOnePerson = randomUniquePerson();
+  const trapTwoPerson = randomUniquePerson();
   const correct: ContactEntry = {
     contactName: `${correctPerson.firstName} ${correctPerson.lastName}`,
     contactTitle: bestTitle,
@@ -384,7 +759,7 @@ function buildProceduralContactSet(
 function buildNearMissCompany(
   subtype: NearMissSubtype,
   config: TempoDirectorySeedConfig,
-  usedNames: Set<string>
+  registry: CompanyNameRegistry
 ): DesignedCompany {
   for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
     const vertical = subtype === "adjacent_vertical" ? "urgent care" : pickRandom(config.verticalPool);
@@ -393,18 +768,39 @@ function buildNearMissCompany(
         ? ["Urgent Care", "Walk-In Clinic"]
         : config.suffixByVertical[vertical] ?? ["Group"];
     const companyName = buildUniqueCompanyName(
+      registry,
       pickRandom(config.namePrefixPool),
       pickRandom(suffixes),
-      usedNames
+      config
     );
+    if (!companyName) {
+      continue;
+    }
 
     let locations = pickRandom([4, 5, 6, 7, 8]);
     let metro = pickRandom(config.metroPoolInTerritory);
     let onlineBooking = false;
     let triggerQuality: TriggerQuality = "weak";
     let keyedTrigger: string | null = "Operational review cycle";
-    let researchFacts = ["Leadership has not prioritized scheduling changes this quarter."];
+    let researchFacts: string[] = [];
     let publicSignals = ["Stable appointment volume with routine hiring only"];
+
+    if (subtype === "too_small") {
+      locations = pickRandom([1, 2]);
+    } else if (subtype === "too_big") {
+      locations = pickRandom([13, 14, 15, 18]);
+    } else if (subtype === "out_of_territory") {
+      metro = pickRandom(config.metroPoolOutOfTerritory);
+    } else if (subtype === "no_strain") {
+      triggerQuality = "none";
+      keyedTrigger = null;
+      publicSignals = ["No recent expansion or front-desk hiring reported"];
+      researchFacts = ["Operations described current scheduling as steady in a trade profile."];
+    } else {
+      researchFacts = [
+        "Leadership has not prioritized scheduling changes this quarter.",
+      ];
+    }
 
     if (subtype === "too_small") {
       locations = pickRandom([1, 2]);
@@ -448,11 +844,12 @@ function buildNearMissCompany(
       continue;
     }
 
-    usedNames.add(normalizeCompanyName(companyName));
     return company;
   }
 
-  throw new Error(`Could not build near_miss company for subtype "${subtype}".`);
+  throw new Error(
+    `Could not build near_miss company for subtype "${subtype}". Expand name pools if name allocation failed.`
+  );
 }
 
 /**
@@ -461,16 +858,20 @@ function buildNearMissCompany(
 function buildTrapCompany(
   subtype: TrapSubtype,
   config: TempoDirectorySeedConfig,
-  usedNames: Set<string>
+  registry: CompanyNameRegistry
 ): DesignedCompany {
   for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
     const vertical = pickRandom(config.verticalPool);
     const suffixes = config.suffixByVertical[vertical] ?? ["Group"];
     const companyName = buildUniqueCompanyName(
+      registry,
       pickRandom(config.namePrefixPool),
       pickRandom(suffixes),
-      usedNames
+      config
     );
+    if (!companyName) {
+      continue;
+    }
 
     const locations = pickRandom([4, 5, 6, 7, 8, 9, 10]);
     const metro = pickRandom(config.metroPoolInTerritory);
@@ -482,27 +883,15 @@ function buildTrapCompany(
       "Review mentions long hold times on phones",
     ];
     let keyedTrigger = "Front-desk hiring wave";
+    const trapDisqualifierFact = TRAP_DISQUALIFIER_BY_SUBTYPE[subtype];
 
     if (subtype === "already_solved") {
       onlineBooking = true;
-      researchFacts = [
-        "Signed a multi-year agreement with a scheduling vendor last year.",
-        "IT ticket history shows a recent rollout of patient self-scheduling.",
-      ];
       publicSignals = [
         "Website advertises online booking",
         "Recent marketing push for the patient portal",
       ];
-    } else if (subtype === "franchise_power") {
-      researchFacts = [
-        "Corporate franchise office mandates approved vendor lists for all locations.",
-        "Local managers cannot purchase scheduling tools without national approval.",
-      ];
     } else if (subtype === "contracting") {
-      researchFacts = [
-        "Finance memo cites a freeze on discretionary software spend.",
-        "Administrative headcount was reduced last quarter.",
-      ];
       publicSignals = [
         "Announced administrative staff reductions",
         "Leadership memo emphasizes margin protection",
@@ -510,18 +899,10 @@ function buildTrapCompany(
       triggerQuality = "strong";
       keyedTrigger = "Administrative staff reduction";
     } else if (subtype === "phantom_fit") {
-      researchFacts = [
-        "Expansion headline was a rebranding of an existing location, not a new site opening.",
-        "Operations lead privately noted scheduling is not a current priority.",
-      ];
       publicSignals = [
         "Press release about a 'new location' opening",
         "Social post celebrating growth",
       ];
-    }
-
-    if (researchFacts.length === 0) {
-      researchFacts = ["Hidden operational constraint not visible on the public card."];
     }
 
     const contactSet = buildProceduralContactSet(config);
@@ -544,20 +925,22 @@ function buildTrapCompany(
       bestContact: contactSet.correct.contactName,
       why: `Trap (${subtype}) — attractive on the card, disqualifier lives in research.`,
       contactSet,
+      trapDisqualifierFact,
     };
     const score = scoreIcpFit(toIcpInput(company));
     const attractive =
       score.axesPassed >= 3 &&
       (company.triggerQuality === "strong" || company.triggerQuality === "weak");
-    if (!attractive || company.researchFacts.length === 0) {
+    if (!attractive) {
       continue;
     }
 
-    usedNames.add(normalizeCompanyName(companyName));
     return company;
   }
 
-  throw new Error(`Could not build trap company for subtype "${subtype}".`);
+  throw new Error(
+    `Could not build trap company for subtype "${subtype}". Expand name pools if name allocation failed.`
+  );
 }
 
 /**
@@ -565,16 +948,20 @@ function buildTrapCompany(
  */
 function buildSecondaryStrongFit(
   config: TempoDirectorySeedConfig,
-  usedNames: Set<string>
+  registry: CompanyNameRegistry
 ): DesignedCompany {
   for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
     const vertical = pickRandom(config.verticalPool);
     const suffixes = config.suffixByVertical[vertical] ?? ["Group"];
     const companyName = buildUniqueCompanyName(
+      registry,
       pickRandom(config.namePrefixPool),
       pickRandom(suffixes),
-      usedNames
+      config
     );
+    if (!companyName) {
+      continue;
+    }
 
     const locations = pickRandom([4, 5, 6, 7, 9, 10]);
     const metro = pickRandom(config.metroPoolInTerritory);
@@ -615,11 +1002,12 @@ function buildSecondaryStrongFit(
       continue;
     }
 
-    usedNames.add(normalizeCompanyName(companyName));
     return company;
   }
 
-  throw new Error("Could not build secondary strong_fit company.");
+  throw new Error(
+    "Could not build secondary strong_fit company. Expand name pools if name allocation failed."
+  );
 }
 
 /**
@@ -627,15 +1015,17 @@ function buildSecondaryStrongFit(
  */
 function buildPassCompany(
   config: TempoDirectorySeedConfig,
-  usedNames: Set<string>,
+  registry: CompanyNameRegistry,
   forceName?: string
 ): DesignedCompany {
   for (let attempt = 0; attempt < GENERATION_RETRY_MAX; attempt += 1) {
     const vertical = pickRandom(config.passVerticalPool);
-    const suffix = pickRandom(config.passSuffixPool);
     const companyName =
       forceName ??
-      buildUniqueCompanyName(pickRandom(config.namePrefixPool), suffix, usedNames);
+      buildUniquePassCompanyName(registry, config);
+    if (!companyName) {
+      continue;
+    }
 
     const locations = pickRandom([4, 5, 6, 7, 8]);
     const metro = pickRandom([
@@ -654,7 +1044,7 @@ function buildPassCompany(
       onlineBooking: Math.random() < 0.4,
       blurb: `${verticalToIndustry(vertical)} business operating in ${metro}.`,
       publicSignals: ["Routine operations with no notable public scheduling news"],
-      researchFacts: ["Not a core Tempo vertical for this territory exercise."],
+      researchFacts: [],
       class: "pass",
       subtype: null,
       fitRank: null,
@@ -669,11 +1059,18 @@ function buildPassCompany(
       continue;
     }
 
-    usedNames.add(normalizeCompanyName(companyName));
+    if (forceName) {
+      if (!registry.tryRegister(forceName)) {
+        throw new Error(`Forced pass company name "${forceName}" violates name registry rules.`);
+      }
+    }
+
     return company;
   }
 
-  throw new Error("Could not build pass company that fails a visible ICP axis.");
+  throw new Error(
+    "Could not build pass company that fails a visible ICP axis. If retries were exhausted due to names, expand passPrefixPool, passSuffixPool, or nameDescriptorPool."
+  );
 }
 
 /**
@@ -705,14 +1102,16 @@ export function resolveProceduralCounts(config: TempoDirectorySeedConfig): {
  * Builds the full 64-company roster from authored + procedural slots.
  */
 export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCompany[] {
+  globalUsedContactNames.clear();
+  const registry = new CompanyNameRegistry();
+  for (const company of config.authoredCompanies) {
+    registry.registerAuthored(company.companyName);
+  }
   const procedural = resolveProceduralCounts(config);
-  const usedNames = new Set<string>(
-    config.authoredCompanies.map((company) => normalizeCompanyName(company.companyName))
-  );
   const companies: DesignedCompany[] = [...config.authoredCompanies];
 
   for (let index = 0; index < procedural.strong_fit; index += 1) {
-    companies.push(buildSecondaryStrongFit(config, usedNames));
+    companies.push(buildSecondaryStrongFit(config, registry));
   }
 
   const nearMissQueue: NearMissSubtype[] = [];
@@ -735,7 +1134,7 @@ export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCo
     }
   }
   for (const subtype of nearMissQueue) {
-    companies.push(buildNearMissCompany(subtype, config, usedNames));
+    companies.push(buildNearMissCompany(subtype, config, registry));
   }
 
   const trapQueue: TrapSubtype[] = [];
@@ -748,17 +1147,19 @@ export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCo
     }
   }
   for (const subtype of trapQueue) {
-    companies.push(buildTrapCompany(subtype, config, usedNames));
+    companies.push(buildTrapCompany(subtype, config, registry));
   }
 
   for (let index = 0; index < procedural.pass; index += 1) {
     if (index === 0) {
-      companies.push(buildPassCompany(config, usedNames, "Summit Outdoor Gear"));
+      companies.push(buildPassCompany(config, registry, "Summit Outdoor Gear"));
       continue;
     }
-    companies.push(buildPassCompany(config, usedNames));
+    companies.push(buildPassCompany(config, registry));
   }
 
+  registerAuthoredContactNames(companies);
+  finalizeResearchFacts(companies);
   return companies;
 }
 
@@ -837,12 +1238,75 @@ export function validateAnswerKey(
     if (company.researchFacts.length === 0) {
       throw new Error(`R5 violated: trap "${company.companyName}" has empty research_facts.`);
     }
+    if (company.researchFacts.length < 2) {
+      throw new Error(
+        `R5 violated: trap "${company.companyName}" must have at least 2 research_facts.`
+      );
+    }
   }
 
   const normalized = companies.map((company) => normalizeCompanyName(company.companyName));
   const unique = new Set(normalized);
   if (unique.size !== normalized.length) {
     throw new Error("R6 violated: duplicate company names after normalization.");
+  }
+
+  for (const company of companies) {
+    if (company.companyName.includes("(") || company.companyName.includes(")")) {
+      throw new Error(
+        `R6 violated: company name "${company.companyName}" contains a parenthetical qualifier.`
+      );
+    }
+  }
+
+  for (let left = 0; left < normalized.length; left += 1) {
+    for (let right = left + 1; right < normalized.length; right += 1) {
+      const a = normalized[left] as string;
+      const b = normalized[right] as string;
+      if (a.includes(b) || b.includes(a)) {
+        throw new Error(
+          `R6 violated: normalized company names form a substring pair (${companies[left]?.companyName} / ${companies[right]?.companyName}).`
+        );
+      }
+    }
+  }
+
+  const firstWordCounts = new Map<string, number>();
+  for (const company of companies) {
+    const firstWord = companyFirstWord(company.companyName).toLowerCase();
+    firstWordCounts.set(firstWord, (firstWordCounts.get(firstWord) ?? 0) + 1);
+  }
+  for (const [firstWord, count] of Array.from(firstWordCounts.entries())) {
+    if (count > MAX_FIRST_WORD_OCCURRENCES) {
+      throw new Error(
+        `R6 violated: first word "${firstWord}" appears ${count} times (max ${MAX_FIRST_WORD_OCCURRENCES}).`
+      );
+    }
+  }
+  const summitCount = firstWordCounts.get(SUMMIT_FIRST_WORD) ?? 0;
+  if (summitCount !== 2) {
+    throw new Error(
+      `R6 violated: first word "Summit" must appear exactly twice (got ${summitCount}).`
+    );
+  }
+
+  const factCountsByClass = new Map<CompanyClass, number[]>();
+  for (const company of companies) {
+    const group = factCountsByClass.get(company.class) ?? [];
+    group.push(company.researchFacts.length);
+    factCountsByClass.set(company.class, group);
+  }
+  for (const [companyClass, lengths] of Array.from(factCountsByClass.entries())) {
+    if (lengths.some((length) => length < 2 || length > 5)) {
+      throw new Error(
+        `research_facts count for class "${companyClass}" must stay within 2–5 (got ${lengths.join(", ")}).`
+      );
+    }
+    if (new Set(lengths).size === 1) {
+      throw new Error(
+        `research_facts count for class "${companyClass}" has no spread (all ${lengths[0]}).`
+      );
+    }
   }
 
   if (companies.length !== 64) {
@@ -928,7 +1392,7 @@ function buildDesignedContactRows(
 }
 
 function buildFillerContactRows(companyId: string, config: TempoDirectorySeedConfig): ContactRowInsert[] {
-  const contacts = [randomPerson(), randomPerson(), randomPerson()];
+  const contacts = [randomUniquePerson(), randomUniquePerson(), randomUniquePerson()];
   return contacts.map((person, index) => ({
     company_id: companyId,
     contact_name: `${person.firstName} ${person.lastName}`,
