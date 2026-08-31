@@ -34,10 +34,6 @@ export function ProspectingDataRoomChat({
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  const companyById = useMemo(() => {
-    return new Map(companies.map((company) => [company.id, company]));
-  }, [companies]);
-
   const sortedCompanies = useMemo(() => {
     return [...companies].sort((a, b) => a.name.localeCompare(b.name));
   }, [companies]);
@@ -56,12 +52,6 @@ export function ProspectingDataRoomChat({
 
   const allSelected =
     companies.length > 0 && attachedIds.length === companies.length;
-
-  const attachedCompanies = useMemo(() => {
-    return attachedIds
-      .map((id) => companyById.get(id))
-      .filter((company): company is DataRoomCompany => Boolean(company));
-  }, [attachedIds, companyById]);
 
   useEffect(() => {
     const el = chatScrollRef.current;
@@ -100,11 +90,6 @@ export function ProspectingDataRoomChat({
         ? prev.filter((id) => id !== companyId)
         : [...prev, companyId]
     );
-    setSendError(null);
-  };
-
-  const removeAttached = (companyId: string): void => {
-    setAttachedIds((prev) => prev.filter((id) => id !== companyId));
     setSendError(null);
   };
 
@@ -270,31 +255,6 @@ export function ProspectingDataRoomChat({
               </div>
             </div>
           ) : null}
-        </div>
-
-        <div className="flex flex-wrap gap-2 min-h-[32px]">
-          {attachedCompanies.length === 0 ? (
-            <span className="text-label-sm text-on-surface-variant">
-              No documents attached yet.
-            </span>
-          ) : (
-            attachedCompanies.map((company) => (
-              <span
-                key={company.id}
-                className="inline-flex items-center gap-1.5 h-8 pl-3 pr-1.5 rounded-full bg-secondary-container/30 text-on-surface text-label-sm font-bold border border-secondary/20"
-              >
-                {company.name}
-                <button
-                  type="button"
-                  onClick={() => removeAttached(company.id)}
-                  className="w-6 h-6 rounded-full hover:bg-white/70 flex items-center justify-center text-on-surface-variant"
-                  aria-label={`Detach ${company.name}`}
-                >
-                  <MaterialIcon name="close" className="text-[14px]" />
-                </button>
-              </span>
-            ))
-          )}
         </div>
       </div>
 
