@@ -12,6 +12,33 @@ import type { DataRoomCompany } from "@/app/api/student/data-room/route";
 import { sanitizeAiResearchReply } from "@/lib/tempo-prospecting";
 import type { ChatMessage } from "@/types";
 
+type AttachmentNotice = {
+  kind: "attachment";
+  action: "attached" | "removed";
+  companyName: string;
+};
+
+type ChatTimelineItem = ChatMessage | AttachmentNotice;
+
+function isChatMessage(item: ChatTimelineItem): item is ChatMessage {
+  return "role" in item;
+}
+
+function toApiMessages(timeline: ChatTimelineItem[]): ChatMessage[] {
+  return timeline.map((item) => {
+    if (isChatMessage(item)) {
+      return item;
+    }
+    return {
+      role: "user",
+      content:
+        item.action === "attached"
+          ? `Attached ${item.companyName}.`
+          : `Removed ${item.companyName}.`,
+    };
+  });
+}
+
 type ProspectingDataRoomChatProps = {
   attemptId: string;
   companies: DataRoomCompany[];
@@ -25,7 +52,7 @@ export function ProspectingDataRoomChat({
   companies,
 }: ProspectingDataRoomChatProps): React.ReactElement {
   const [attachedIds, setAttachedIds] = useState<string[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [timeline, setTimeline] = useState<ChatTimelineItem[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isAILoading, setIsAILoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -36,6 +63,10 @@ export function ProspectingDataRoomChat({
 
   const sortedCompanies = useMemo(() => {
     return [...companies].sort((a, b) => a.name.localeCompare(b.name));
+  }, [companies]);
+
+  const companyById = useMemo(() => {
+    return new Map(companies.map((company) => [company.id, company]));
   }, [companies]);
 
   const filteredPickerCompanies = useMemo(() => {
@@ -59,7 +90,7 @@ export function ProspectingDataRoomChat({
       return;
     }
     el.scrollTop = el.scrollHeight;
-  }, [messages, isAILoading]);
+  }, [timeline, isAILoading]);
 
   useEffect(() => {
     if (!isPickerOpen) {
@@ -74,23 +105,55 @@ export function ProspectingDataRoomChat({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [isPickerOpen]);
 
-  const selectAllCompanies = (): void => {
-    setAttachedIds(companies.map((company) => company.id));
+  const applyAttachedIds = (updater: (previousIds: string[]) => string[]): void => {
+    setAttachedIds((previousIds) => {
+      const nextIds = updater(previousIds);
+      const previousSet = new Set(previousIds);
+      const nextSet = new Set(nextIds);
+      const added = nextIds.filter((id) => !previousSet.has(id));
+      const removed = previousIds.filter((id) => !nextSet.has(id));
+
+      if (added.length > 0 || removed.length > 0) {
+        setTimeline((current) => {
+          if (!current.some(isChatMessage)) {
+            return current;
+          }
+
+          const notices: AttachmentNotice[] = [
+            ...added.map((id) => ({
+              kind: "attachment" as const,
+              action: "attached" as const,
+              companyName: companyById.get(id)?.name ?? "Company",
+            })),
+            ...removed.map((id) => ({
+              kind: "attachment" as const,
+              action: "removed" as const,
+              companyName: companyById.get(id)?.name ?? "Company",
+            })),
+          ];
+          return [...current, ...notices];
+        });
+      }
+
+      return nextIds;
+    });
     setSendError(null);
+  };
+
+  const selectAllCompanies = (): void => {
+    applyAttachedIds(() => companies.map((company) => company.id));
   };
 
   const clearAllCompanies = (): void => {
-    setAttachedIds([]);
-    setSendError(null);
+    applyAttachedIds(() => []);
   };
 
   const toggleAttached = (companyId: string): void => {
-    setAttachedIds((prev) =>
-      prev.includes(companyId)
-        ? prev.filter((id) => id !== companyId)
-        : [...prev, companyId]
+    applyAttachedIds((previousIds) =>
+      previousIds.includes(companyId)
+        ? previousIds.filter((id) => id !== companyId)
+        : [...previousIds, companyId]
     );
-    setSendError(null);
   };
 
   const handleSendMessage = async (): Promise<void> => {
@@ -104,11 +167,12 @@ export function ProspectingDataRoomChat({
     }
 
     const userMessage: ChatMessage = { role: "user", content: trimmed };
-    const prior = messages;
-    const nextMessages = [...prior, userMessage];
+    const prior = toApiMessages(timeline);
+    const companyIdsForRequest = [...attachedIds];
+    const nextTimeline: ChatTimelineItem[] = [...timeline, userMessage];
     setChatInput("");
     setSendError(null);
-    setMessages(nextMessages);
+    setTimeline(nextTimeline);
     setIsAILoading(true);
 
     try {
@@ -117,7 +181,7 @@ export function ProspectingDataRoomChat({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           attemptId,
-          companyIds: attachedIds,
+          companyIds: companyIdsForRequest,
           messages: prior,
           newMessage: trimmed,
         }),
@@ -132,8 +196,8 @@ export function ProspectingDataRoomChat({
         throw new Error(body?.error ?? "AI request failed");
       }
 
-      setMessages([
-        ...nextMessages,
+      setTimeline([
+        ...nextTimeline,
         { role: "assistant", content: sanitizeAiResearchReply(body.reply) },
       ]);
     } catch (err) {
@@ -141,8 +205,8 @@ export function ProspectingDataRoomChat({
         err instanceof Error && err.message
           ? err.message
           : "Sorry, I couldn't respond right now. Try again in a moment.";
-      setMessages([
-        ...nextMessages,
+      setTimeline([
+        ...nextTimeline,
         {
           role: "assistant",
           content: message,
@@ -263,13 +327,13 @@ export function ProspectingDataRoomChat({
           ref={chatScrollRef}
           className="flex-1 overflow-y-auto custom-scrollbar min-h-0 flex flex-col"
         >
-          {attachedIds.length === 0 ? (
+          {timeline.length === 0 && attachedIds.length === 0 ? (
             <div className="flex-1 flex items-center justify-center text-center px-6 p-lg min-h-[200px]">
               <p className="text-body-md text-on-surface-variant max-w-md">
                 Attach one or more company documents above to start asking questions.
               </p>
             </div>
-          ) : messages.length === 0 ? (
+          ) : timeline.length === 0 && attachedIds.length > 0 ? (
             <div className="flex-1 flex items-center justify-center text-center px-6 p-lg min-h-[200px]">
               <p className="text-body-md text-on-surface-variant max-w-md">
                 Ask a question about the attached documents. The assistant will not rank or pick a
@@ -278,31 +342,48 @@ export function ProspectingDataRoomChat({
             </div>
           ) : (
             <div className="p-lg space-y-lg">
-              {messages.map((msg, i) => (
-                <div key={`data-room-chat-${msg.role}-${i}`}>
-                  {msg.role === "user" ? (
-                    <div className="flex justify-end">
-                      <div className="bg-primary-container text-on-primary p-md rounded-2xl rounded-tr-none max-w-[80%] shadow-sm">
-                        <p className="text-body-md whitespace-pre-wrap">{msg.content}</p>
-                      </div>
+              {timeline.map((item, i) => {
+                if (!isChatMessage(item)) {
+                  return (
+                    <div
+                      key={`data-room-attachment-${item.action}-${item.companyName}-${i}`}
+                      className="flex items-center gap-3 py-1"
+                    >
+                      <div className="flex-1 h-px bg-outline-variant" />
+                      <p className="text-label-sm text-on-surface-variant shrink-0">
+                        {item.action === "attached" ? "Attached" : "Removed"} {item.companyName}
+                      </p>
+                      <div className="flex-1 h-px bg-outline-variant" />
                     </div>
-                  ) : (
-                    <div className="flex justify-start gap-md">
-                      <div className="w-8 h-8 rounded-full bg-secondary-fixed/40 flex items-center justify-center shrink-0">
-                        <MaterialIcon name="smart_toy" className="text-secondary text-[20px]" />
+                  );
+                }
+
+                return (
+                  <div key={`data-room-chat-${item.role}-${i}`}>
+                    {item.role === "user" ? (
+                      <div className="flex justify-end">
+                        <div className="bg-primary-container text-on-primary p-md rounded-2xl rounded-tr-none max-w-[80%] shadow-sm">
+                          <p className="text-body-md whitespace-pre-wrap">{item.content}</p>
+                        </div>
                       </div>
-                      <div className="bg-surface-container p-md rounded-2xl rounded-tl-none max-w-[85%] border border-outline-variant">
-                        <p className="text-[10px] font-bold text-primary uppercase tracking-wide mb-1">
-                          Rehearse AI
-                        </p>
-                        <p className="text-body-md leading-relaxed whitespace-pre-wrap">
-                          {msg.content}
-                        </p>
+                    ) : (
+                      <div className="flex justify-start gap-md">
+                        <div className="w-8 h-8 rounded-full bg-secondary-fixed/40 flex items-center justify-center shrink-0">
+                          <MaterialIcon name="smart_toy" className="text-secondary text-[20px]" />
+                        </div>
+                        <div className="bg-surface-container p-md rounded-2xl rounded-tl-none max-w-[85%] border border-outline-variant">
+                          <p className="text-[10px] font-bold text-primary uppercase tracking-wide mb-1">
+                            Rehearse AI
+                          </p>
+                          <p className="text-body-md leading-relaxed whitespace-pre-wrap">
+                            {item.content}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
 
               {isAILoading ? (
                 <div className="flex items-center gap-sm text-on-surface-variant">
