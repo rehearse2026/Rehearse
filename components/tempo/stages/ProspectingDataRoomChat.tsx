@@ -259,52 +259,59 @@ export function ProspectingDataRoomChat({
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-lg space-y-lg custom-scrollbar">
+        <div
+          ref={chatScrollRef}
+          className="flex-1 overflow-y-auto custom-scrollbar min-h-0 flex flex-col"
+        >
           {attachedIds.length === 0 ? (
-            <div className="h-full min-h-[200px] flex items-center justify-center text-center px-6">
+            <div className="flex-1 flex items-center justify-center text-center px-6 p-lg min-h-[200px]">
               <p className="text-body-md text-on-surface-variant max-w-md">
                 Attach one or more company documents above to start asking questions.
               </p>
             </div>
           ) : messages.length === 0 ? (
-            <p className="text-body-md text-on-surface-variant text-center py-md">
-              Ask a question about the attached documents. The assistant will not rank or pick a
-              target for you.
-            </p>
-          ) : null}
-
-          {messages.map((msg, i) => (
-            <div key={`data-room-chat-${msg.role}-${i}`}>
-              {msg.role === "user" ? (
-                <div className="flex justify-end">
-                  <div className="bg-primary-container text-on-primary p-md rounded-2xl rounded-tr-none max-w-[80%] shadow-sm">
-                    <p className="text-body-md whitespace-pre-wrap">{msg.content}</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex justify-start gap-md">
-                  <div className="w-8 h-8 rounded-full bg-secondary-fixed/40 flex items-center justify-center shrink-0">
-                    <MaterialIcon name="smart_toy" className="text-secondary text-[20px]" />
-                  </div>
-                  <div className="bg-surface-container p-md rounded-2xl rounded-tl-none max-w-[85%] border border-outline-variant">
-                    <p className="text-[10px] font-bold text-primary uppercase tracking-wide mb-1">
-                      Rehearse AI
-                    </p>
-                    <p className="text-body-md leading-relaxed whitespace-pre-wrap">
-                      {msg.content}
-                    </p>
-                  </div>
-                </div>
-              )}
+            <div className="flex-1 flex items-center justify-center text-center px-6 p-lg min-h-[200px]">
+              <p className="text-body-md text-on-surface-variant max-w-md">
+                Ask a question about the attached documents. The assistant will not rank or pick a
+                target for you.
+              </p>
             </div>
-          ))}
+          ) : (
+            <div className="p-lg space-y-lg">
+              {messages.map((msg, i) => (
+                <div key={`data-room-chat-${msg.role}-${i}`}>
+                  {msg.role === "user" ? (
+                    <div className="flex justify-end">
+                      <div className="bg-primary-container text-on-primary p-md rounded-2xl rounded-tr-none max-w-[80%] shadow-sm">
+                        <p className="text-body-md whitespace-pre-wrap">{msg.content}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-start gap-md">
+                      <div className="w-8 h-8 rounded-full bg-secondary-fixed/40 flex items-center justify-center shrink-0">
+                        <MaterialIcon name="smart_toy" className="text-secondary text-[20px]" />
+                      </div>
+                      <div className="bg-surface-container p-md rounded-2xl rounded-tl-none max-w-[85%] border border-outline-variant">
+                        <p className="text-[10px] font-bold text-primary uppercase tracking-wide mb-1">
+                          Rehearse AI
+                        </p>
+                        <p className="text-body-md leading-relaxed whitespace-pre-wrap">
+                          {msg.content}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
 
-          {isAILoading ? (
-            <div className="flex items-center gap-sm text-on-surface-variant">
-              <div className="w-4 h-4 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
-              <span className="text-label-sm">Rehearse AI is thinking...</span>
+              {isAILoading ? (
+                <div className="flex items-center gap-sm text-on-surface-variant">
+                  <div className="w-4 h-4 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+                  <span className="text-label-sm">Rehearse AI is thinking...</span>
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          )}
         </div>
 
         <div className="p-lg bg-white border-t border-outline-variant shrink-0">
