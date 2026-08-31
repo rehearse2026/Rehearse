@@ -6,12 +6,33 @@
 "use client";
 
 import {
+  ICP_MIN_DISQUALIFIER_CHARS,
+  ICP_MIN_OPERATIONAL_SIGNALS_CHARS,
+  ICP_MIN_TARGET_VERTICALS_CHARS,
   parseIcpLocationCount,
   type ProspectingWizardState,
 } from "@/lib/tempo-prospecting";
 
 const FIELD_MAX_LENGTH = 500;
 const DISQUALIFIER_MAX_LENGTH = 120;
+
+type MinCharHintProps = {
+  value: string;
+  minChars: number;
+};
+
+/** Shown only after the student starts typing and is still below the minimum. */
+function MinCharHint({ value, minChars }: MinCharHintProps): React.ReactElement | null {
+  const length = value.trim().length;
+  if (length === 0 || length >= minChars) {
+    return null;
+  }
+  return (
+    <p className="font-label-sm text-on-surface-variant">
+      Enter at least {minChars} characters to continue ({length} / {minChars}).
+    </p>
+  );
+}
 
 type ProspectingIcpStepProps = {
   attemptId: string;
@@ -59,6 +80,10 @@ export function ProspectingIcpStep({
             placeholder="Example: Multi-location dental groups, specialty clinics expanding regionally..."
             value={state.icpTargetVerticals}
             onChange={(e) => onFieldChange("icpTargetVerticals", e.target.value)}
+          />
+          <MinCharHint
+            value={state.icpTargetVerticals}
+            minChars={ICP_MIN_TARGET_VERTICALS_CHARS}
           />
         </section>
 
@@ -130,6 +155,10 @@ export function ProspectingIcpStep({
           <p className="font-label-sm text-on-surface-variant">
             List observable signals you can verify during research, not generic intent.
           </p>
+          <MinCharHint
+            value={state.icpOperationalSignals}
+            minChars={ICP_MIN_OPERATIONAL_SIGNALS_CHARS}
+          />
         </section>
 
         <section className="space-y-md">
@@ -187,6 +216,12 @@ export function ProspectingIcpStep({
                   value={state[field.key]}
                   onChange={(e) => onFieldChange(field.key, e.target.value)}
                 />
+                {field.required || state[field.key].trim().length > 0 ? (
+                  <MinCharHint
+                    value={state[field.key]}
+                    minChars={ICP_MIN_DISQUALIFIER_CHARS}
+                  />
+                ) : null}
               </div>
             ))}
           </div>

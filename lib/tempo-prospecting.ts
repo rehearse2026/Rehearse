@@ -563,27 +563,30 @@ export function countWords(text: string): number {
 }
 
 /**
+ * Minimum trimmed character counts for ICP step advance (see isIcpDefinitionComplete).
+ */
+export const ICP_MIN_TARGET_VERTICALS_CHARS = 10;
+export const ICP_MIN_OPERATIONAL_SIGNALS_CHARS = 20;
+export const ICP_MIN_DISQUALIFIER_CHARS = 3;
+
+/**
  * Returns whether the ICP form (step 1) meets advance requirements.
  */
 export function isIcpDefinitionComplete(state: ProspectingWizardState): boolean {
-  const minVerticals = 10;
-  const minSignals = 20;
-  const minDisqualifier = 3;
-
   const minLoc = parseIcpLocationCount(state.icpSizeMinLocations);
   const maxLoc = parseIcpLocationCount(state.icpSizeMaxLocations);
   const filledDisqualifiers = [
     state.icpDisqualifier1,
     state.icpDisqualifier2,
     state.icpDisqualifier3,
-  ].filter((value) => value.trim().length >= minDisqualifier);
+  ].filter((value) => value.trim().length >= ICP_MIN_DISQUALIFIER_CHARS);
 
   return (
-    state.icpTargetVerticals.trim().length >= minVerticals &&
+    state.icpTargetVerticals.trim().length >= ICP_MIN_TARGET_VERTICALS_CHARS &&
     minLoc !== null &&
     maxLoc !== null &&
     maxLoc >= minLoc &&
-    state.icpOperationalSignals.trim().length >= minSignals &&
+    state.icpOperationalSignals.trim().length >= ICP_MIN_OPERATIONAL_SIGNALS_CHARS &&
     filledDisqualifiers.length >= 2
   );
 }
