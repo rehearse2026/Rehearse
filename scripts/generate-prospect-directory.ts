@@ -103,6 +103,22 @@ export type StructuralCorrelationConfig<TRecord> = {
   exemptPropertyNames?: string[];
 };
 
+/** One string-list field checked for templated sentence frames (simulation-agnostic). */
+export type TemplateDensityFieldConfig<TRecord> = {
+  name: string;
+  getStrings: (record: TRecord) => readonly string[];
+  /** Max strings sharing one skeleton within a single record (default 2). */
+  maxPerRecord?: number;
+  /** Max share of corpus-wide strings one skeleton may occupy (default 0.15). */
+  maxCorpusShare?: number;
+};
+
+/** Config for validateNoTemplateDensity — no simulation-specific field names. */
+export type TemplateDensityConfig<TRecord> = {
+  getRecordLabel: (record: TRecord) => string;
+  fields: TemplateDensityFieldConfig<TRecord>[];
+};
+
 export interface TempoDirectorySeedConfig {
   simulationId: string;
   authoredCompanies: DesignedCompany[];
@@ -127,6 +143,8 @@ export interface TempoDirectorySeedConfig {
   trapDisqualifierVariantsBySubtype: Record<TrapSubtype, string[]>;
   /** Structural properties checked for answer-key class correlation before insert. */
   structuralCorrelation: StructuralCorrelationConfig<DesignedCompany>;
+  /** String-list fields checked for templated sentence-frame density before insert. */
+  templateDensity: TemplateDensityConfig<DesignedCompany>;
   verticalPool: string[];
   metroPoolInTerritory: string[];
   metroPoolOutOfTerritory: string[];
@@ -295,6 +313,113 @@ export function validateNoStructuralClassCorrelation<TRecord>(
       }
     }
   }
+}
+
+/**
+ * Reduces a sentence to a skeleton for template matching: lowercase, strip punctuation,
+ * keep first three and last three tokens (drops variable middle).
+ */
+export function toSentenceSkeleton(text: string): string {
+  const normalized = text
+    .toLowerCase()
+    .replace(/['']/g, "")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = normalized.split(" ").filter((word) => word.length > 0);
+  if (words.length <= 6) {
+    return words.join(" ");
+  }
+  return [...words.slice(0, 3), ...words.slice(-3)].join(" ");
+}
+
+export type TemplateDensityReport = {
+  mostCommonSkeleton: { skeleton: string; count: number; share: number } | null;
+};
+
+/**
+ * Fails when templated sentence frames cluster within records or dominate the corpus.
+ */
+export function validateNoTemplateDensity<TRecord>(
+  records: readonly TRecord[],
+  config: TemplateDensityConfig<TRecord>
+): TemplateDensityReport {
+  let globalBest: { skeleton: string; count: number } | null = null;
+  let globalTotal = 0;
+
+  for (const field of config.fields) {
+    const maxPerRecord = field.maxPerRecord ?? 2;
+    const maxCorpusShare = field.maxCorpusShare ?? 0.15;
+    const skeletonCorpusCounts = new Map<string, number>();
+    let fieldTotal = 0;
+
+    for (const record of records) {
+      const strings = field.getStrings(record);
+      const skeletonCounts = new Map<string, number>();
+      const skeletonToOriginal = new Map<string, string>();
+
+      for (const value of strings) {
+        const skeleton = toSentenceSkeleton(value);
+        skeletonCounts.set(skeleton, (skeletonCounts.get(skeleton) ?? 0) + 1);
+        skeletonToOriginal.set(skeleton, value);
+        skeletonCorpusCounts.set(skeleton, (skeletonCorpusCounts.get(skeleton) ?? 0) + 1);
+        fieldTotal += 1;
+      }
+
+      for (const [skeleton, count] of Array.from(skeletonCounts.entries())) {
+        if (count > maxPerRecord) {
+          throw new Error(
+            `Template density: record "${config.getRecordLabel(record)}" has ${count} strings sharing skeleton "${skeleton}" in field "${field.name}" (max ${maxPerRecord})`
+          );
+        }
+      }
+
+      const dominant = Array.from(skeletonCounts.entries()).filter(([, count]) => count >= 3);
+      const singletons = Array.from(skeletonCounts.entries()).filter(([, count]) => count === 1);
+      if (dominant.length > 0 && singletons.length === 1) {
+        const outlierSkeleton = singletons[0]?.[0] ?? "";
+        const outlierText = skeletonToOriginal.get(outlierSkeleton) ?? outlierSkeleton;
+        throw new Error(
+          `Template odd-one-out: record "${config.getRecordLabel(record)}" has 3+ strings sharing skeleton "${dominant[0]?.[0]}" and one structurally distinct string in field "${field.name}": "${outlierText}"`
+        );
+      }
+    }
+
+    globalTotal += fieldTotal;
+    for (const [skeleton, count] of Array.from(skeletonCorpusCounts.entries())) {
+      if (!globalBest || count > globalBest.count) {
+        globalBest = { skeleton, count };
+      }
+      const share = fieldTotal > 0 ? count / fieldTotal : 0;
+      if (share > maxCorpusShare) {
+        throw new Error(
+          `Template corpus density: skeleton "${skeleton}" accounts for ${(share * 100).toFixed(1)}% of all strings in field "${field.name}" (max ${(maxCorpusShare * 100).toFixed(0)}%)`
+        );
+      }
+    }
+  }
+
+  return {
+    mostCommonSkeleton:
+      globalBest && globalTotal > 0
+        ? {
+            skeleton: globalBest.skeleton,
+            count: globalBest.count,
+            share: globalBest.count / globalTotal,
+          }
+        : null,
+  };
+}
+
+/**
+ * Picks a trap disqualifier insert index biased toward the middle and end of the array.
+ */
+function weightedTrapDisqualifierIndex(neutralCount: number): number {
+  if (neutralCount <= 0) {
+    return 1;
+  }
+  const biased = Math.pow(Math.random(), 0.35);
+  return 1 + Math.floor(biased * neutralCount);
 }
 
 const NEAR_MISS_SUBTYPES: NearMissSubtype[] = [
@@ -705,7 +830,7 @@ export function finalizeResearchFacts(
       );
 
       if (disqualifier) {
-        const insertAt = 1 + Math.floor(Math.random() * Math.max(1, neutralFacts.length));
+        const insertAt = weightedTrapDisqualifierIndex(neutralFacts.length);
         company.researchFacts = [
           ...neutralFacts.slice(0, insertAt),
           disqualifier,
@@ -1514,6 +1639,7 @@ export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCo
   finalizeResearchFacts(companies, config);
   validateContentQuality(companies, config);
   validateNoStructuralClassCorrelation(companies, config.structuralCorrelation);
+  validateNoTemplateDensity(companies, config.templateDensity);
   return companies;
 }
 

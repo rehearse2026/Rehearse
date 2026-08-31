@@ -1,138 +1,151 @@
 # Tempo Data Room v2 — generation report
 
-Generated: 2026-08-31 (anti-correlation guardrail + universal 4–7 fact floor)  
+Generated: 2026-08-31 (template-density guardrail + rewritten filler fact pools)  
 Simulation ID: `00000000-0000-0000-0000-000000000002` (Sell Tempo to Summit Dental Group)
 
 ## What changed
 
-- Added visible/hidden layer columns via `supabase/data-room-v2-migration.sql` (additive only).
-- Canonical ICP lives in `scripts/config/tempo-icp.ts`.
-- Directory seed + generator rewritten for **64 companies** with an answer key.
-- All companies are flagged `in_data_room = true` (full room; no 10-company subset).
-- Generator wipes **only** `crm_prospect_directory` + `crm_prospect_contacts` rows for the Tempo simulation.
-- **2026-08-31 (earlier):** Vertical-specific fact/signal pools; target trigger signature reserved for Summit; unique trap disqualifiers per trap; pass names paired to verticals.
-- **2026-08-31 (this run):** Universal `research_facts` range **4–7** for every class (no trap-specific floor). Generic `validateNoStructuralClassCorrelation` runs before insert. Each trap receives a **unique** disqualifier sentence from `trapDisqualifierVariantsBySubtype`.
+- **2026-08-31 (this run):** Removed single-frame supplemental facts (`"Local coverage noted the … in the Mountain West region."`). Replaced with 33 hand-written facts per vertical (varied structure, subject, and length). Added generic `validateNoTemplateDensity` alongside the existing anti-correlation validator. Trap disqualifier insert index now biases toward the middle and end of the array.
+- **2026-08-31 (prior):** Universal `research_facts` range 4–7; `validateNoStructuralClassCorrelation`; unique trap disqualifiers; vertical fact/signal pools.
 
-## Anti-correlation guardrail (generic, reusable)
+## Template-density guardrail (generic, reusable)
 
-`validateNoStructuralClassCorrelation(records, config)` in `scripts/generate-prospect-directory.ts` is **simulation-agnostic**. Property definitions and `getClass` live in seed config (`structuralCorrelation`); the core validator references no Tempo-specific field names.
+`validateNoTemplateDensity(records, config)` in `scripts/generate-prospect-directory.ts` is **simulation-agnostic**. Field definitions live in `templateDensity` in `tempo-directory-seed.ts`.
 
-For each configured property it groups records by answer-key class and **throws** on:
+**Skeleton algorithm:** lowercase, strip punctuation, keep first three and last three tokens (`toSentenceSkeleton`).
 
-1. **Exclusive value** — a property value appears in only one class (e.g. only traps have 4 facts).
-2. **Excluded value** — a class never takes a value that other classes do take (e.g. traps never have 3 facts while others do).
+**Per-record failures:**
 
-Tempo checks (via `TEMPO_STRUCTURAL_CORRELATION` in `tempo-directory-seed.ts`):
+| Condition | When it throws |
+|-----------|----------------|
+| **Template density** | More than 2 strings in one record share a skeleton |
+| **Odd-one-out** | 3+ strings share one skeleton and exactly one string is structurally distinct |
 
-| Property | `getValue` source |
-|----------|-------------------|
-| `research_facts length` | `researchFacts.length` |
-| `public_signals length` | `publicSignals.length` |
-| `contact count` | 3 for all companies (designed contact set or pass filler) |
-| `blurb length bucket` | `short` / `medium` / `long` from blurb character count |
-| `size_note presence` | `has` / `none` |
+**Corpus failure:** any skeleton accounts for more than 15% of all strings in a configured field.
 
-`exemptPropertyNames` is empty for Tempo (no property is allowed to correlate with class).
+Runs in the same pre-insert pass as `validateNoStructuralClassCorrelation`; neither replaces the other.
 
-### Validator proof (forced leak tests)
+### Validator proof (forced leaks)
 
-| Forced condition | Error thrown |
-|------------------|--------------|
-| Trap fact counts shifted to 5–7 only (others keep 4–7) | `Structural leak: class 'trap' never takes research_facts length value 4, which other classes take` |
-| Pass `public_signals` forced to length 2 (others 3) | `Structural leak: public_signals length value 2 occurs only in class 'pass'` |
-| `contact count` | Uniformly 3 for all classes — no correlation, validator passes (by design) |
+| Test | Exact error |
+|------|-------------|
+| 3 templated facts (old frame) in one record | `Template density: record "Rainier Vision Group" has 3 strings sharing skeleton "local coverage noted in the region" in field "facts" (max 2)` |
+| 3 templated + 1 distinct (odd-one-out) | `Template odd-one-out: record "Rainier Vision Group" has 3+ strings sharing skeleton "local coverage noted in the region" and one structurally distinct string in field "facts": "Practice-wide vendor selection for appointment software finished last quarter."` |
 
-## Before running the generator
+### Corpus skeleton stats (2026-08-31 run)
 
-1. Paste and run `supabase/data-room-v2-migration.sql` in Supabase → SQL Editor.
-2. Run: `npx tsx scripts/generate-prospect-directory.ts`
+| Metric | Value |
+|--------|-------|
+| Total research fact strings | 349 |
+| Most common skeleton | `indeed post seeks for evening shifts` |
+| Corpus share | **0.9%** (well under 15% cap) |
+| Facts containing `"in the Mountain West region"` | **0** |
 
-`crm_prospect_documents` is intentionally left untouched.
+## Anti-correlation guardrail (unchanged)
 
-## Class distribution (plan)
+`validateNoStructuralClassCorrelation` still runs before insert. Production roster passes with every class spanning fact counts 4, 5, 6, and 7.
 
-| Class | Count |
-|-------|------:|
-| `strong_fit` | 9 |
-| `near_miss` | 16 |
-| `trap` | 7 |
-| `pass` | 32 |
-| **Total** | **64** |
-
-## research_facts distribution (2026-08-31 anti-correlation run)
-
-Universal range **4–7** with spread across all four values in every class.
+## research_facts distribution (2026-08-31 run)
 
 | class | facts=4 | facts=5 | facts=6 | facts=7 |
 |-------|--------:|--------:|--------:|--------:|
 | `strong_fit` | 3 | 2 | 2 | 2 |
 | `near_miss` | 4 | 4 | 4 | 4 |
-| `trap` | 2 | 2 | 2 | 1 |
+| `trap` | 2 | 1 | 2 | 2 |
 | `pass` | 8 | 8 | 8 | 8 |
 
-```sql
-SELECT class, jsonb_array_length(research_facts) AS facts, COUNT(*)
-FROM crm_prospect_directory
-WHERE simulation_id = '00000000-0000-0000-0000-000000000002'
-GROUP BY 1, 2 ORDER BY 1, 2;
-```
+## All 7 traps — full fact lists (human review)
 
-No row has fewer than 4 facts. Traps share the same 4–7 spread as other classes — fact count is not a trap indicator.
+Disqualifier marked with `*`. Index is 0-based.
 
-## Trap disqualifier audit (unique wording per trap)
+### Northview Family Dentistry (`already_solved`) — disqualifier @ **5**
 
-Each trap has exactly one disqualifier-themed fact, never at index 0. **No two traps share the same disqualifier sentence.**
+0. Patient forum threads praise the refreshed portal branding.
+1. Local newsletter profiled the practice's school outreach program.
+2. Website highlights same-day emergency appointment availability.
+3. A trade journal interview quoted the owner on refreshing waiting-room signage.
+4. Volunteers handed out toothbrushes at an elementary school health fair.
+5. **\*** Operations team standardized on SlotEasy eighteen months ago with a multi-year agreement.
 
-| Company | Subtype | Disqualifier |
-|---------|---------|--------------|
-| Northview Family Dentistry | `already_solved` | Operations team standardized on SlotEasy eighteen months ago with a multi-year agreement. |
-| Norwood Family Dentistry | `already_solved` | Operations standardized on an incumbent scheduling platform after a competitive review two years ago. |
-| Rainier Vision Group | `already_solved` | Practice-wide vendor selection for appointment software finished last quarter with a locked-in term. |
-| Golden State Dental Alliance | `contracting` | Internal memo leaked to a trade blog cites a freeze on discretionary vendor projects through next fiscal year. |
-| Larkspur Dental Group | `contracting` | CFO memo suspended evaluation of new SaaS vendors through the next budget cycle. |
-| Maple Chiropractic Center | `franchise_power` | Franchise agreement requires all clinics to purchase scheduling tools from an approved corporate catalog. |
-| Fairview Rehab Partners | `phantom_fit` | Expansion headline was a rebranding of an existing location, not a new site opening. |
+### Golden State Dental Alliance (`contracting`) — disqualifier @ **5**
 
-## Fact and signal reuse
+0. Google reviews praise friendly hygienists at most locations.
+1. Careers page lists hygienist openings at two locations.
+2. Local newsletter profiled the group's community outreach program.
+3. Website highlights same-day emergency appointment availability.
+4. An Indeed post described flexible Tuesday hours for a sterilization technician.
+5. **\*** Internal memo leaked to a trade blog cites a freeze on discretionary vendor projects through next fiscal year.
 
-| Metric | Result |
-|--------|--------|
-| Facts appearing in >2 companies | **0** |
-| Public signals appearing in >2 companies | **0** |
-| Dual target trigger signature (non-target) | **0** |
+### Goldleaf Eye Care (`already_solved`) — disqualifier @ **3**
 
-## Answer-key rules enforced (hard failures)
+0. Local paper covered a donation of exam vouchers to a school district.
+1. A blogger walked through the difference between medical and routine exams.
+2. Facebook followers voted on favorite staff picks for frame styling advice.
+3. **\*** Operations standardized on an incumbent scheduling platform after a competitive review two years ago.
 
-| Rule | Enforcement |
-|------|-------------|
-| **R1** | Exactly one `strong_fit` with `fit_rank = 1` (Summit) |
-| **R2** | No other `strong_fit` matches Summit on all four ICP axes with a `strong` trigger |
-| **R3** | Every `pass` fails at least one visible ICP axis |
-| **R4** | Every `near_miss` fails ≥1 ICP axis or has `weak`/`none` trigger |
-| **R5** | Every `trap` passes ≥3 ICP axes, has `strong`/`weak` trigger, 4–7 `research_facts`, one disqualifier |
-| **R6** | Name registry rules (unique, no parentheses, substring pairs, Summit ×2) |
-| **R7** | Every company has 4–7 `research_facts`; spread across 4–6–7 within each class |
-| **R8** | `validateNoStructuralClassCorrelation` — no structural property may predict class |
+### Harbor Physical Therapy (`franchise_power`) — disqualifier @ **3**
+
+0. Community board listed a posture-screening event at a farmers market.
+1. Careers page lists a billing specialist for the billing office.
+2. Yelp reviewers mention flexible morning appointment slots.
+3. **\*** Franchise agreement requires all clinics to purchase scheduling tools from an approved corporate catalog.
+
+### Riverside Eye Care (`contracting`) — disqualifier @ **5**
+
+0. Chamber of commerce spotlighted the group's downtown storefront.
+1. Instagram campaign featured new designer frame arrivals.
+2. Website notes complimentary frame adjustments during business hours.
+3. Patients compared lens coating options in a lengthy Google Q&A thread.
+4. Indeed listed weekend hours for an optician comfortable with pediatric fittings.
+5. **\*** CFO memo suspended evaluation of new SaaS vendors through the next budget cycle.
+6. Glassdoor reviewers liked the paid training for new optical sales associates.
+
+### Glenwood Dental Care (`phantom_fit`) — disqualifier @ **4**
+
+0. Instagram story featured staff volunteering at a health fair.
+1. A chamber newsletter photo showed the team after a charity pro-bono day.
+2. Patient forum threads discuss parking at the downtown location.
+3. Community calendar listed a free dental-sealant clinic for teens.
+4. **\*** Expansion headline was a rebranding of an existing location, not a new site opening.
+
+### Beacon Chiropractic Center (`already_solved`) — disqualifier @ **3**
+
+0. A radio spot promoted a posture screening at the farmer's market booth.
+1. Reddit users debated which location has the easiest stroller access.
+2. Careers page lists a chiropractic assistant opening.
+3. **\*** Practice-wide vendor selection for appointment software finished last quarter with a locked-in term.
+4. Yelp reviewers mention short visits for maintenance adjustments.
+
+No trap has the disqualifier at index 0. All seven disqualifier sentences are distinct. No trap fact list is dominated by a shared sentence frame.
+
+## Trap disqualifier sentences (unique)
+
+1. Operations team standardized on SlotEasy eighteen months ago with a multi-year agreement.
+2. Internal memo leaked to a trade blog cites a freeze on discretionary vendor projects through next fiscal year.
+3. Operations standardized on an incumbent scheduling platform after a competitive review two years ago.
+4. Franchise agreement requires all clinics to purchase scheduling tools from an approved corporate catalog.
+5. CFO memo suspended evaluation of new SaaS vendors through the next budget cycle.
+6. Expansion headline was a rebranding of an existing location, not a new site opening.
+7. Practice-wide vendor selection for appointment software finished last quarter with a locked-in term.
 
 ## Verification results (2026-08-31 run)
 
 | Check | Result |
 |-------|--------|
-| All classes spread 4–7 facts | Pass |
-| No row &lt; 4 facts | Pass |
-| Anti-correlation validator (production roster) | Pass |
-| Forced leak test (trap min 5) | Throws as documented |
-| Forced leak test (pass signals = 2) | Throws as documented |
-| Unique trap disqualifiers (7/7) | Pass |
+| Template-density validator (production roster) | Pass |
+| Forced template-density error | Documented above |
+| Forced odd-one-out error | Documented above |
+| Anti-correlation validator | Pass |
+| No `"in the Mountain West region"` in facts | 0 |
+| Top skeleton corpus share | 0.9% |
+| Unique trap disqualifiers | 7/7 |
 | `fit_rank = 1` | Summit Dental Group only |
 | Class distribution | 9 / 16 / 7 / 32 |
-| Contacts per company | 3 each, 1 `is_correct_contact` |
 | `crm_prospect_documents` | 0 rows |
 | `app/api/student/data-room-chat/route.ts` | Unchanged |
 | `npm run build` | Pass |
 
-Guardrail warnings emitted: none.
+## Before running the generator
 
-## Rules that could not be satisfied
-
-None in local roster validation.
+1. Run `supabase/data-room-v2-migration.sql` if schema not yet applied.
+2. Run: `npx tsx scripts/generate-prospect-directory.ts`
