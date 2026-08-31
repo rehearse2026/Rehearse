@@ -33,6 +33,57 @@ const DISQUALIFIER_KEYWORDS_BY_TRAP_SUBTYPE: Record<TrapSubtype, string[]> = {
   phantom_fit: ["rebranding", "not a new site", "existing location", "rebrand"],
 };
 
+const TRAP_DISQUALIFIER_VARIANTS_BY_SUBTYPE: Record<TrapSubtype, string[]> = {
+  already_solved: [
+    "Signed a multi-year agreement with a scheduling vendor last year.",
+    "Front office completed a scheduling software rollout under a multi-year contract eighteen months ago.",
+    "Practice-wide vendor selection for appointment software finished last quarter with a locked-in term.",
+    "Operations standardized on an incumbent scheduling platform after a competitive review two years ago.",
+  ],
+  franchise_power: [
+    "Corporate franchise office mandates approved vendor lists for all locations.",
+    "Franchise agreement requires all clinics to purchase scheduling tools from an approved corporate catalog.",
+  ],
+  contracting: [
+    "Finance memo cites a freeze on discretionary software spend.",
+    "CFO memo suspended evaluation of new SaaS vendors through the next budget cycle.",
+    "Leadership circulated a directive pausing all non-essential vendor contracts until fiscal year end.",
+  ],
+  phantom_fit: [
+    "Expansion headline was a rebranding of an existing location, not a new site opening.",
+    "Announced 'new clinic' was a renamed existing office; no additional site was added.",
+  ],
+};
+
+function blurbLengthBucket(blurb: string): string {
+  const length = blurb.trim().length;
+  if (length < 80) {
+    return "short";
+  }
+  if (length <= 150) {
+    return "medium";
+  }
+  return "long";
+}
+
+const TEMPO_STRUCTURAL_CORRELATION: TempoDirectorySeedConfig["structuralCorrelation"] = {
+  getClass: (company) => company.class,
+  exemptPropertyNames: [],
+  properties: [
+    { name: "research_facts length", getValue: (company) => company.researchFacts.length },
+    { name: "public_signals length", getValue: (company) => company.publicSignals.length },
+    {
+      name: "contact count",
+      getValue: (company) => (company.contactSet ? 1 + company.contactSet.traps.length : 3),
+    },
+    { name: "blurb length bucket", getValue: (company) => blurbLengthBucket(company.blurb) },
+    {
+      name: "size_note presence",
+      getValue: (company) => (company.sizeNote.trim().length > 0 ? "has" : "none"),
+    },
+  ],
+};
+
 const RESEARCH_FACTS_BY_VERTICAL: Record<string, FactPoolEntry[]> = {
   dental: [
     factEntry("Careers page lists hygienist openings at two locations.", "careers_hygienist"),
@@ -295,6 +346,57 @@ const RESEARCH_FACTS_BY_VERTICAL: Record<string, FactPoolEntry[]> = {
     factEntry("Google reviews highlight convenient highway access.", "google_access"),
   ],
 };
+
+const VERTICAL_ENTITY_LABEL: Record<string, string> = {
+  dental: "practice",
+  veterinary: "hospital",
+  "physical therapy": "clinic",
+  optometry: "office",
+  "med spa": "studio",
+  chiropractic: "clinic",
+  retail: "store",
+  hospitality: "property",
+  "auto repair": "shop",
+  "legal services": "firm",
+  "fitness studio": "studio",
+  "property management": "portfolio",
+  "urgent care": "clinic",
+};
+
+const SUPPLEMENTAL_FACT_THEMES = [
+  "community open house",
+  "staff volunteer day",
+  "seasonal hours update",
+  "local press profile",
+  "customer appreciation event",
+  "facility refresh project",
+  "industry award mention",
+  "neighborhood partnership",
+  "employee training program",
+  "charity fundraiser",
+  "open-enrollment reminder",
+  "sustainability initiative",
+  "patient education series",
+  "member appreciation week",
+  "regional trade feature",
+] as const;
+
+function buildSupplementalFacts(vertical: string): FactPoolEntry[] {
+  const entity = VERTICAL_ENTITY_LABEL[vertical] ?? "business";
+  return SUPPLEMENTAL_FACT_THEMES.map((theme, index) =>
+    factEntry(
+      `Local coverage noted the ${entity}'s ${theme} in the Mountain West region.`,
+      `supplement_${index}`
+    )
+  );
+}
+
+const MERGED_RESEARCH_FACTS_BY_VERTICAL: Record<string, FactPoolEntry[]> = Object.fromEntries(
+  Object.entries(RESEARCH_FACTS_BY_VERTICAL).map(([vertical, entries]) => [
+    vertical,
+    [...entries, ...buildSupplementalFacts(vertical)],
+  ])
+);
 
 const PUBLIC_SIGNALS_BY_VERTICAL: Record<string, string[]> = {
   dental: [
@@ -839,10 +941,12 @@ export const tempoDirectorySeed: TempoDirectorySeedConfig = {
     },
   ],
   targetTriggerSignatureThemes: TARGET_TRIGGER_SIGNATURE_THEMES,
-  researchFactsByVertical: RESEARCH_FACTS_BY_VERTICAL,
+  researchFactsByVertical: MERGED_RESEARCH_FACTS_BY_VERTICAL,
   publicSignalsByVertical: PUBLIC_SIGNALS_BY_VERTICAL,
   publicSignalsByTrapSubtype: PUBLIC_SIGNALS_BY_TRAP_SUBTYPE,
   disqualifierKeywordsByTrapSubtype: DISQUALIFIER_KEYWORDS_BY_TRAP_SUBTYPE,
+  trapDisqualifierVariantsBySubtype: TRAP_DISQUALIFIER_VARIANTS_BY_SUBTYPE,
+  structuralCorrelation: TEMPO_STRUCTURAL_CORRELATION,
   verticalPool: [
     "dental",
     "veterinary",

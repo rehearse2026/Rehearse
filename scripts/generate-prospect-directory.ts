@@ -89,6 +89,20 @@ export type TriggerSignatureTheme = {
   matchers: string[];
 };
 
+/** One measurable property checked for class correlation (simulation-agnostic). */
+export type StructuralCorrelationProperty<TRecord> = {
+  name: string;
+  getValue: (record: TRecord) => number | string;
+};
+
+/** Config for validateNoStructuralClassCorrelation — no simulation-specific fields. */
+export type StructuralCorrelationConfig<TRecord> = {
+  getClass: (record: TRecord) => string;
+  properties: StructuralCorrelationProperty<TRecord>[];
+  /** Property names allowed to correlate with class (empty for Tempo). */
+  exemptPropertyNames?: string[];
+};
+
 export interface TempoDirectorySeedConfig {
   simulationId: string;
   authoredCompanies: DesignedCompany[];
@@ -109,6 +123,10 @@ export interface TempoDirectorySeedConfig {
   publicSignalsByTrapSubtype: Record<TrapSubtype, string[]>;
   /** Keywords that identify disqualifier-themed facts for trap validation. */
   disqualifierKeywordsByTrapSubtype: Record<TrapSubtype, string[]>;
+  /** Wording variants; each trap must receive a unique sentence from this pool. */
+  trapDisqualifierVariantsBySubtype: Record<TrapSubtype, string[]>;
+  /** Structural properties checked for answer-key class correlation before insert. */
+  structuralCorrelation: StructuralCorrelationConfig<DesignedCompany>;
   verticalPool: string[];
   metroPoolInTerritory: string[];
   metroPoolOutOfTerritory: string[];
@@ -184,17 +202,100 @@ const GENERATION_RETRY_MAX = 80;
 const MAX_FIRST_WORD_OCCURRENCES = 2;
 const SUMMIT_FIRST_WORD = "summit";
 const MAX_SENTENCE_REUSE_ACROSS_COMPANIES = 2;
-const TRAP_MIN_RESEARCH_FACTS = 4;
+const MIN_RESEARCH_FACTS = 4;
+const MAX_RESEARCH_FACTS = 7;
 
-const TRAP_DISQUALIFIER_BY_SUBTYPE: Record<TrapSubtype, string> = {
-  already_solved:
-    "Signed a multi-year agreement with a scheduling vendor last year.",
-  franchise_power:
-    "Corporate franchise office mandates approved vendor lists for all locations.",
-  contracting: "Finance memo cites a freeze on discretionary software spend.",
-  phantom_fit:
-    "Expansion headline was a rebranding of an existing location, not a new site opening.",
-};
+/**
+ * Tracks trap disqualifier sentences — each may be used by at most one trap.
+ */
+class TrapDisqualifierAllocator {
+  private readonly used = new Set<string>();
+
+  registerAuthored(sentence: string): void {
+    const key = sentence.trim().toLowerCase();
+    if (this.used.has(key)) {
+      throw new Error(`Duplicate trap disqualifier registered: "${sentence}"`);
+    }
+    this.used.add(key);
+  }
+
+  allocate(subtype: TrapSubtype, variants: readonly string[]): string {
+    for (const variant of shuffle(variants)) {
+      const key = variant.trim().toLowerCase();
+      if (!this.used.has(key)) {
+        this.used.add(key);
+        return variant;
+      }
+    }
+    throw new Error(
+      `Trap disqualifier variants exhausted for subtype "${subtype}". Add more variants to trapDisqualifierVariantsBySubtype.`
+    );
+  }
+
+  reset(): void {
+    this.used.clear();
+  }
+}
+
+const globalTrapDisqualifierAllocator = new TrapDisqualifierAllocator();
+
+/**
+ * Fails when a structural property value is exclusive to one class or absent from
+ * a class that other classes take (simulation-agnostic).
+ */
+export function validateNoStructuralClassCorrelation<TRecord>(
+  records: readonly TRecord[],
+  config: StructuralCorrelationConfig<TRecord>
+): void {
+  const allClasses = new Set(records.map((record) => config.getClass(record)));
+
+  for (const property of config.properties) {
+    if (config.exemptPropertyNames?.includes(property.name)) {
+      continue;
+    }
+
+    const valueToClasses = new Map<string | number, Set<string>>();
+    const classToValues = new Map<string, Set<string | number>>();
+
+    for (const record of records) {
+      const companyClass = config.getClass(record);
+      const value = property.getValue(record);
+
+      const classesForValue = valueToClasses.get(value) ?? new Set<string>();
+      classesForValue.add(companyClass);
+      valueToClasses.set(value, classesForValue);
+
+      const valuesForClass = classToValues.get(companyClass) ?? new Set<string | number>();
+      valuesForClass.add(value);
+      classToValues.set(companyClass, valuesForClass);
+    }
+
+    for (const [value, classesWithValue] of Array.from(valueToClasses.entries())) {
+      if (classesWithValue.size === 1 && allClasses.size > 1) {
+        const onlyClass = Array.from(classesWithValue)[0] as string;
+        throw new Error(
+          `Structural leak: ${property.name} value ${JSON.stringify(value)} occurs only in class '${onlyClass}'`
+        );
+      }
+    }
+
+    const valuesSeenAnywhere = Array.from(valueToClasses.keys());
+    for (const companyClass of Array.from(allClasses)) {
+      const valuesForClass = classToValues.get(companyClass) ?? new Set<string | number>();
+      for (const value of valuesSeenAnywhere) {
+        const classesWithValue = valueToClasses.get(value) as Set<string>;
+        if (classesWithValue.size === 0) {
+          continue;
+        }
+        if (!valuesForClass.has(value)) {
+          throw new Error(
+            `Structural leak: class '${companyClass}' never takes ${property.name} value ${JSON.stringify(value)}, which other classes take`
+          );
+        }
+      }
+    }
+  }
+}
 
 const NEAR_MISS_SUBTYPES: NearMissSubtype[] = [
   "too_small",
@@ -249,22 +350,20 @@ function shuffle<T>(items: readonly T[]): T[] {
 }
 
 /**
- * Builds a per-class spread of fact counts in [2, 5] with at least one of each
- * when the class has four or more companies. Traps use [4, 5] only.
+ * Builds a per-class spread of fact counts in [4, 7] with all four values
+ * represented when the class has four or more companies.
  */
-export function spreadFactCounts(classSize: number, companyClass?: CompanyClass): number[] {
+export function spreadFactCounts(classSize: number): number[] {
   if (classSize <= 0) {
     return [];
   }
-  const cycle =
-    companyClass === "trap" ? ([4, 5] as const) : ([2, 3, 4, 5] as const);
+  const cycle = [4, 5, 6, 7];
   const counts: number[] = [];
   while (counts.length < classSize) {
     counts.push(cycle[counts.length % cycle.length] as number);
   }
-  const spreadWidth = companyClass === "trap" ? 2 : 4;
-  if (classSize >= spreadWidth) {
-    for (let index = 0; index < spreadWidth; index += 1) {
+  if (classSize >= 4) {
+    for (let index = 0; index < 4; index += 1) {
       if (!counts.includes(cycle[index] as number)) {
         counts[index] = cycle[index] as number;
       }
@@ -438,6 +537,70 @@ function registerAuthoredSentences(companies: readonly DesignedCompany[]): void 
   }
 }
 
+type BlurbBucket = "short" | "medium" | "long";
+
+function blurbLengthBucket(blurb: string): BlurbBucket {
+  const length = blurb.trim().length;
+  if (length < 80) {
+    return "short";
+  }
+  if (length <= 150) {
+    return "medium";
+  }
+  return "long";
+}
+
+/**
+ * Assigns short/medium/long blurbs so each class can cover every bucket.
+ */
+class BlurbBucketPlanner {
+  private readonly countsByClass = new Map<CompanyClass, Map<BlurbBucket, number>>();
+  private readonly cycle: BlurbBucket[] = ["short", "medium", "long"];
+  private cycleIndex = 0;
+
+  registerAuthored(companyClass: CompanyClass, blurb: string): void {
+    const bucket = blurbLengthBucket(blurb);
+    const counts = this.countsByClass.get(companyClass) ?? new Map<BlurbBucket, number>();
+    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+    this.countsByClass.set(companyClass, counts);
+  }
+
+  nextBucket(companyClass: CompanyClass): BlurbBucket {
+    const counts = this.countsByClass.get(companyClass) ?? new Map<BlurbBucket, number>();
+    for (let attempt = 0; attempt < this.cycle.length * 2; attempt += 1) {
+      const bucket = this.cycle[this.cycleIndex % this.cycle.length] as BlurbBucket;
+      this.cycleIndex += 1;
+      const current = counts.get(bucket) ?? 0;
+      const minCount = Math.min(
+        ...this.cycle.map((candidate) => counts.get(candidate) ?? 0)
+      );
+      if (current <= minCount) {
+        counts.set(bucket, current + 1);
+        this.countsByClass.set(companyClass, counts);
+        return bucket;
+      }
+    }
+    const fallback = this.cycle[this.cycleIndex % this.cycle.length] as BlurbBucket;
+    this.cycleIndex += 1;
+    counts.set(fallback, (counts.get(fallback) ?? 0) + 1);
+    this.countsByClass.set(companyClass, counts);
+    return fallback;
+  }
+}
+
+const globalBlurbBucketPlanner = new BlurbBucketPlanner();
+
+function proceduralBlurb(vertical: string, metro: string, bucket: BlurbBucket): string {
+  const industry = verticalToIndustry(vertical);
+  if (bucket === "short") {
+    return `${industry} operator in ${metro}.`;
+  }
+  if (bucket === "medium") {
+    return `${industry} group operating across ${metro} with routine multi-location patient operations.`;
+  }
+  return `${industry} group operating across ${metro} with routine multi-location patient operations. Regional coverage has described the organization as an established community operator with steady clinic demand.`;
+}
+
 /**
  * Tracks company-name uniqueness, first-word limits, and substring collisions.
  */
@@ -489,7 +652,7 @@ export class CompanyNameRegistry {
 }
 
 /**
- * Expands every company's research_facts to an assigned count; traps require 4–5.
+ * Expands every company's research_facts to an assigned count in [4, 7].
  */
 export function finalizeResearchFacts(
   companies: DesignedCompany[],
@@ -502,16 +665,13 @@ export function finalizeResearchFacts(
     byClass.set(company.class, group);
   }
 
-  for (const [companyClass, group] of Array.from(byClass.entries())) {
-    const targets = spreadFactCounts(group.length, companyClass);
+  for (const [, group] of Array.from(byClass.entries())) {
+    const targets = spreadFactCounts(group.length);
     for (let index = 0; index < group.length; index += 1) {
       const company = group[index] as DesignedCompany;
       const targetCount = targets[index] as number;
       const disqualifier =
-        company.trapDisqualifierFact ??
-        (company.class === "trap" && company.subtype
-          ? TRAP_DISQUALIFIER_BY_SUBTYPE[company.subtype as TrapSubtype]
-          : null);
+        company.class === "trap" ? (company.trapDisqualifierFact ?? null) : null;
       const trapSubtype =
         company.class === "trap" && company.subtype
           ? (company.subtype as TrapSubtype)
@@ -545,10 +705,7 @@ export function finalizeResearchFacts(
       );
 
       if (disqualifier) {
-        const insertAt =
-          company.class === "trap"
-            ? 1 + Math.floor(Math.random() * Math.max(1, neutralFacts.length))
-            : Math.floor(Math.random() * (neutralFacts.length + 1));
+        const insertAt = 1 + Math.floor(Math.random() * Math.max(1, neutralFacts.length));
         company.researchFacts = [
           ...neutralFacts.slice(0, insertAt),
           disqualifier,
@@ -558,10 +715,12 @@ export function finalizeResearchFacts(
         company.researchFacts = neutralFacts.slice(0, targetCount);
       }
 
-      const minFacts = company.class === "trap" ? TRAP_MIN_RESEARCH_FACTS : 2;
-      if (company.researchFacts.length < minFacts || company.researchFacts.length > 5) {
+      if (
+        company.researchFacts.length < MIN_RESEARCH_FACTS ||
+        company.researchFacts.length > MAX_RESEARCH_FACTS
+      ) {
         throw new Error(
-          `research_facts for "${company.companyName}" must be between ${minFacts} and 5 after finalize (got ${company.researchFacts.length}).`
+          `research_facts for "${company.companyName}" must be between ${MIN_RESEARCH_FACTS} and ${MAX_RESEARCH_FACTS} after finalize (got ${company.researchFacts.length}).`
         );
       }
     }
@@ -893,7 +1052,11 @@ function buildNearMissCompany(
       inTerritory,
       sizeNote: `${locations} location${locations === 1 ? "" : "s"}`,
       onlineBooking,
-      blurb: `${verticalToIndustry(vertical)} operator in ${metro}.`,
+      blurb: proceduralBlurb(
+        vertical,
+        metro,
+        globalBlurbBucketPlanner.nextBucket("near_miss")
+      ),
       publicSignals,
       researchFacts,
       class: "near_miss",
@@ -953,7 +1116,10 @@ function buildTrapCompany(
     const signalPool = config.publicSignalsByTrapSubtype[subtype];
     let publicSignals = allocatePublicSignals(signalPool, 3);
     let keyedTrigger = "Operational growth signals";
-    const trapDisqualifierFact = TRAP_DISQUALIFIER_BY_SUBTYPE[subtype];
+    const trapDisqualifierFact = globalTrapDisqualifierAllocator.allocate(
+      subtype,
+      config.trapDisqualifierVariantsBySubtype[subtype]
+    );
 
     if (subtype === "already_solved") {
       onlineBooking = true;
@@ -976,7 +1142,11 @@ function buildTrapCompany(
       inTerritory: true,
       sizeNote: `${locations} locations`,
       onlineBooking,
-      blurb: `${verticalToIndustry(vertical)} group operating across ${metro}.`,
+      blurb: proceduralBlurb(
+        vertical,
+        metro,
+        globalBlurbBucketPlanner.nextBucket("trap")
+      ),
       publicSignals,
       researchFacts,
       class: "trap",
@@ -1046,7 +1216,11 @@ function buildSecondaryStrongFit(
       inTerritory: true,
       sizeNote: `${locations} locations`,
       onlineBooking,
-      blurb: `${verticalToIndustry(vertical)} operator with recent operational signals.`,
+      blurb: proceduralBlurb(
+        vertical,
+        metro,
+        globalBlurbBucketPlanner.nextBucket("strong_fit")
+      ),
       publicSignals,
       researchFacts: [],
       class: "strong_fit",
@@ -1109,8 +1283,12 @@ function buildPassCompany(
       inTerritory,
       sizeNote: `${locations} locations`,
       onlineBooking: Math.random() < 0.4,
-      blurb: `${verticalToIndustry(vertical)} business operating in ${metro}.`,
-      publicSignals: allocatePublicSignals(passSignals, 2),
+      blurb: proceduralBlurb(
+        vertical,
+        metro,
+        globalBlurbBucketPlanner.nextBucket("pass")
+      ),
+      publicSignals: allocatePublicSignals(passSignals, 3),
       researchFacts: [],
       class: "pass",
       subtype: null,
@@ -1231,8 +1409,10 @@ export function validateContentQuality(
       continue;
     }
     const subtype = company.subtype as TrapSubtype;
-    const disqualifier =
-      company.trapDisqualifierFact ?? TRAP_DISQUALIFIER_BY_SUBTYPE[subtype];
+    const disqualifier = company.trapDisqualifierFact;
+    if (!disqualifier) {
+      throw new Error(`Trap "${company.companyName}" is missing trapDisqualifierFact.`);
+    }
     const disqualifierMatches = company.researchFacts.filter(
       (fact) =>
         fact.trim() === disqualifier.trim() ||
@@ -1241,11 +1421,6 @@ export function validateContentQuality(
     if (disqualifierMatches.length !== 1) {
       throw new Error(
         `Trap "${company.companyName}" has ${disqualifierMatches.length} disqualifier-themed facts (expected 1).`
-      );
-    }
-    if (company.researchFacts.length < TRAP_MIN_RESEARCH_FACTS) {
-      throw new Error(
-        `Trap "${company.companyName}" has ${company.researchFacts.length} research_facts (minimum ${TRAP_MIN_RESEARCH_FACTS}).`
       );
     }
     const disqualifierIndex = company.researchFacts.findIndex(
@@ -1257,6 +1432,14 @@ export function validateContentQuality(
       );
     }
   }
+
+  const trapDisqualifiers = companies
+    .filter((company) => company.class === "trap")
+    .map((company) => company.trapDisqualifierFact?.trim().toLowerCase() ?? "");
+  const uniqueDisqualifiers = new Set(trapDisqualifiers);
+  if (uniqueDisqualifiers.size !== trapDisqualifiers.length) {
+    throw new Error("Duplicate trap disqualifier sentence across traps.");
+  }
 }
 
 /**
@@ -1265,10 +1448,15 @@ export function validateContentQuality(
 export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCompany[] {
   globalFactUsage.reset();
   globalSignalUsage.reset();
+  globalTrapDisqualifierAllocator.reset();
   globalUsedContactNames.clear();
   const registry = new CompanyNameRegistry();
   for (const company of config.authoredCompanies) {
     registry.registerAuthored(company.companyName);
+    globalBlurbBucketPlanner.registerAuthored(company.class, company.blurb);
+    if (company.class === "trap" && company.trapDisqualifierFact) {
+      globalTrapDisqualifierAllocator.registerAuthored(company.trapDisqualifierFact);
+    }
   }
   registerAuthoredSentences(config.authoredCompanies);
   const procedural = resolveProceduralCounts(config);
@@ -1325,6 +1513,7 @@ export function buildCompanyRoster(config: TempoDirectorySeedConfig): DesignedCo
   registerAuthoredContactNames(companies);
   finalizeResearchFacts(companies, config);
   validateContentQuality(companies, config);
+  validateNoStructuralClassCorrelation(companies, config.structuralCorrelation);
   return companies;
 }
 
@@ -1403,9 +1592,12 @@ export function validateAnswerKey(
     if (company.researchFacts.length === 0) {
       throw new Error(`R5 violated: trap "${company.companyName}" has empty research_facts.`);
     }
-    if (company.researchFacts.length < TRAP_MIN_RESEARCH_FACTS) {
+    if (
+      company.researchFacts.length < MIN_RESEARCH_FACTS ||
+      company.researchFacts.length > MAX_RESEARCH_FACTS
+    ) {
       throw new Error(
-        `R5 violated: trap "${company.companyName}" must have at least ${TRAP_MIN_RESEARCH_FACTS} research_facts.`
+        `R5 violated: trap "${company.companyName}" must have ${MIN_RESEARCH_FACTS}–${MAX_RESEARCH_FACTS} research_facts.`
       );
     }
   }
@@ -1462,10 +1654,13 @@ export function validateAnswerKey(
     factCountsByClass.set(company.class, group);
   }
   for (const [companyClass, lengths] of Array.from(factCountsByClass.entries())) {
-    const minLength = companyClass === "trap" ? TRAP_MIN_RESEARCH_FACTS : 2;
-    if (lengths.some((length) => length < minLength || length > 5)) {
+    if (
+      lengths.some(
+        (length) => length < MIN_RESEARCH_FACTS || length > MAX_RESEARCH_FACTS
+      )
+    ) {
       throw new Error(
-        `research_facts count for class "${companyClass}" must stay within ${minLength}–5 (got ${lengths.join(", ")}).`
+        `research_facts count for class "${companyClass}" must stay within ${MIN_RESEARCH_FACTS}–${MAX_RESEARCH_FACTS} (got ${lengths.join(", ")}).`
       );
     }
     if (new Set(lengths).size === 1) {
