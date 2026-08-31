@@ -16,21 +16,29 @@ import {
 const FIELD_MAX_LENGTH = 500;
 const DISQUALIFIER_MAX_LENGTH = 120;
 
-type MinCharHintProps = {
+type FieldCounterProps = {
   value: string;
-  minChars: number;
+  maxLength: number;
+  minChars?: number;
 };
 
-/** Shown only after the student starts typing and is still below the minimum. */
-function MinCharHint({ value, minChars }: MinCharHintProps): React.ReactElement | null {
-  const length = value.trim().length;
-  if (length === 0 || length >= minChars) {
-    return null;
-  }
+/** Character count with optional short min-length nudge when typing below advance threshold. */
+function FieldCounter({
+  value,
+  maxLength,
+  minChars,
+}: FieldCounterProps): React.ReactElement {
+  const trimmedLength = value.trim().length;
+  const belowMin =
+    minChars !== undefined && trimmedLength > 0 && trimmedLength < minChars;
+
   return (
-    <p className="font-label-sm text-on-surface-variant">
-      Enter at least {minChars} characters to continue ({length} / {minChars}).
-    </p>
+    <div className="flex items-center gap-sm shrink-0 text-[11px] text-on-surface-variant font-medium">
+      {belowMin ? <span>Min {minChars}</span> : null}
+      <span>
+        {value.length} / {maxLength}
+      </span>
+    </div>
   );
 }
 
@@ -68,9 +76,11 @@ export function ProspectingIcpStep({
             <label className="font-bold text-label-md text-on-surface" htmlFor="icp-target-verticals">
               Target verticals
             </label>
-            <span className="text-[11px] text-on-surface-variant font-medium">
-              {state.icpTargetVerticals.length} / {FIELD_MAX_LENGTH}
-            </span>
+            <FieldCounter
+              value={state.icpTargetVerticals}
+              maxLength={FIELD_MAX_LENGTH}
+              minChars={ICP_MIN_TARGET_VERTICALS_CHARS}
+            />
           </div>
           <textarea
             id="icp-target-verticals"
@@ -80,10 +90,6 @@ export function ProspectingIcpStep({
             placeholder="Example: Multi-location dental groups, specialty clinics expanding regionally..."
             value={state.icpTargetVerticals}
             onChange={(e) => onFieldChange("icpTargetVerticals", e.target.value)}
-          />
-          <MinCharHint
-            value={state.icpTargetVerticals}
-            minChars={ICP_MIN_TARGET_VERTICALS_CHARS}
           />
         </section>
 
@@ -132,16 +138,23 @@ export function ProspectingIcpStep({
         </section>
 
         <section className="space-y-sm">
-          <div className="flex justify-between items-center">
-            <label
-              className="font-bold text-label-md text-on-surface"
-              htmlFor="icp-operational-signals"
-            >
-              Operational signals that predict fit
-            </label>
-            <span className="text-[11px] text-on-surface-variant font-medium">
-              {state.icpOperationalSignals.length} / {FIELD_MAX_LENGTH}
-            </span>
+          <div className="flex justify-between items-start gap-md">
+            <div className="space-y-xs min-w-0">
+              <label
+                className="font-bold text-label-md text-on-surface block"
+                htmlFor="icp-operational-signals"
+              >
+                Operational signals that predict fit
+              </label>
+              <p className="font-label-sm text-on-surface-variant">
+                List observable signals you can verify during research, not generic intent.
+              </p>
+            </div>
+            <FieldCounter
+              value={state.icpOperationalSignals}
+              maxLength={FIELD_MAX_LENGTH}
+              minChars={ICP_MIN_OPERATIONAL_SIGNALS_CHARS}
+            />
           </div>
           <textarea
             id="icp-operational-signals"
@@ -151,13 +164,6 @@ export function ProspectingIcpStep({
             placeholder="Example: Recent location openings, front desk hiring spikes, manual scheduling bottlenecks across sites..."
             value={state.icpOperationalSignals}
             onChange={(e) => onFieldChange("icpOperationalSignals", e.target.value)}
-          />
-          <p className="font-label-sm text-on-surface-variant">
-            List observable signals you can verify during research, not generic intent.
-          </p>
-          <MinCharHint
-            value={state.icpOperationalSignals}
-            minChars={ICP_MIN_OPERATIONAL_SIGNALS_CHARS}
           />
         </section>
 
@@ -197,9 +203,17 @@ export function ProspectingIcpStep({
                     {field.label}
                     {!field.required ? " (optional)" : ""}
                   </label>
-                  <span className="text-[11px] text-on-surface-variant font-medium">
-                    {state[field.key].length} / {DISQUALIFIER_MAX_LENGTH}
-                  </span>
+                  {field.required || state[field.key].trim().length > 0 ? (
+                    <FieldCounter
+                      value={state[field.key]}
+                      maxLength={DISQUALIFIER_MAX_LENGTH}
+                      minChars={ICP_MIN_DISQUALIFIER_CHARS}
+                    />
+                  ) : (
+                    <span className="text-[11px] text-on-surface-variant font-medium">
+                      {state[field.key].length} / {DISQUALIFIER_MAX_LENGTH}
+                    </span>
+                  )}
                 </div>
                 <input
                   id={field.id}
@@ -216,12 +230,6 @@ export function ProspectingIcpStep({
                   value={state[field.key]}
                   onChange={(e) => onFieldChange(field.key, e.target.value)}
                 />
-                {field.required || state[field.key].trim().length > 0 ? (
-                  <MinCharHint
-                    value={state[field.key]}
-                    minChars={ICP_MIN_DISQUALIFIER_CHARS}
-                  />
-                ) : null}
               </div>
             ))}
           </div>
