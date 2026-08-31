@@ -71,18 +71,25 @@ export function ProspectingDataRoomChat({
 
   const filteredPickerCompanies = useMemo(() => {
     const query = pickerSearch.trim().toLowerCase();
-    if (!query) {
-      return sortedCompanies;
-    }
-    return sortedCompanies.filter(
-      (company) =>
-        company.name.toLowerCase().includes(query) ||
-        company.industry.toLowerCase().includes(query)
-    );
-  }, [pickerSearch, sortedCompanies]);
+    const base =
+      query.length === 0
+        ? sortedCompanies
+        : sortedCompanies.filter(
+            (company) =>
+              company.name.toLowerCase().includes(query) ||
+              company.industry.toLowerCase().includes(query)
+          );
 
-  const allSelected =
-    companies.length > 0 && attachedIds.length === companies.length;
+    const attachedSet = new Set(attachedIds);
+    return [...base].sort((a, b) => {
+      const aAttached = attachedSet.has(a.id);
+      const bAttached = attachedSet.has(b.id);
+      if (aAttached !== bAttached) {
+        return aAttached ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [attachedIds, pickerSearch, sortedCompanies]);
 
   useEffect(() => {
     const el = chatScrollRef.current;
@@ -149,11 +156,15 @@ export function ProspectingDataRoomChat({
   };
 
   const toggleAttached = (companyId: string): void => {
+    const isAttaching = !attachedIds.includes(companyId);
     applyAttachedIds((previousIds) =>
       previousIds.includes(companyId)
         ? previousIds.filter((id) => id !== companyId)
         : [...previousIds, companyId]
     );
+    if (isAttaching) {
+      setPickerSearch("");
+    }
   };
 
   const handleSendMessage = async (): Promise<void> => {
@@ -274,14 +285,6 @@ export function ProspectingDataRoomChat({
                 className="text-[18px] shrink-0"
               />
             </button>
-            <button
-              type="button"
-              onClick={allSelected ? clearAllCompanies : selectAllCompanies}
-              disabled={companies.length === 0}
-              className="h-9 px-3 rounded-lg border border-outline-variant bg-white text-label-sm font-bold text-primary hover:bg-surface-container transition-colors disabled:opacity-40"
-            >
-              {allSelected ? "Clear all" : "Select all"}
-            </button>
           </div>
 
           {isPickerOpen ? (
@@ -290,8 +293,8 @@ export function ProspectingDataRoomChat({
               role="listbox"
               aria-multiselectable="true"
             >
-              <div className="p-2 border-b border-outline-variant bg-surface-container-lowest">
-                <div className="relative">
+              <div className="p-2 border-b border-outline-variant bg-surface-container-lowest flex items-center gap-2">
+                <div className="relative flex-1 min-w-0">
                   <MaterialIcon
                     name="search"
                     className="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-[16px]"
@@ -304,6 +307,22 @@ export function ProspectingDataRoomChat({
                     className="w-full h-8 pl-8 pr-3 rounded-md border border-outline-variant bg-white text-sm outline-none focus:ring-2 focus:ring-secondary/50"
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={selectAllCompanies}
+                  disabled={companies.length === 0}
+                  className="h-8 px-2.5 rounded-md border border-outline-variant bg-white text-label-sm font-bold text-primary hover:bg-surface-container transition-colors shrink-0 disabled:opacity-40"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAllCompanies}
+                  disabled={attachedIds.length === 0}
+                  className="h-8 px-2.5 rounded-md border border-outline-variant bg-white text-label-sm font-bold text-on-surface-variant hover:bg-surface-container transition-colors shrink-0 disabled:opacity-40"
+                >
+                  Clear all
+                </button>
               </div>
               <div className="max-h-56 overflow-y-auto custom-scrollbar">
                 {filteredPickerCompanies.length === 0 ? (
