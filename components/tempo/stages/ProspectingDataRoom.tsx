@@ -13,7 +13,7 @@ import { MaterialIcon } from "@/components/ui/MaterialIcon";
 import type { DataRoomCompany } from "@/app/api/student/data-room/route";
 import type { CrmLead } from "@/types";
 
-type MainTab = "documents" | "assistant";
+type MainTab = "companies" | "assistant";
 
 function formatVerticalLabel(vertical: string | null): string | null {
   if (!vertical?.trim()) {
@@ -56,7 +56,7 @@ export function ProspectingDataRoom({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [mainTab, setMainTab] = useState<MainTab>("documents");
+  const [mainTab, setMainTab] = useState<MainTab>("companies");
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([]);
   const [formCompany, setFormCompany] = useState<DataRoomCompany | null>(null);
   const [removingLeadId, setRemovingLeadId] = useState<string | null>(null);
@@ -200,34 +200,84 @@ export function ProspectingDataRoom({
   return (
     <div className="flex flex-col h-full min-h-[520px] border border-outline-variant rounded-xl overflow-hidden bg-surface">
       <div className="px-4 pt-3 pb-2 border-b border-outline-variant bg-surface-container-lowest shrink-0">
-        <div className="inline-flex rounded-lg border border-outline-variant overflow-hidden">
-          {(
-            [
-              { id: "documents" as const, label: "Documents", icon: "folder_open" },
-              { id: "assistant" as const, label: "AI Assistant", icon: "smart_toy" },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setMainTab(tab.id)}
-              className={`inline-flex items-center gap-1.5 px-4 h-9 text-label-md font-bold transition-colors ${
-                mainTab === tab.id
-                  ? "bg-primary-container text-on-primary"
-                  : "bg-white text-on-surface hover:bg-surface-container"
-              }`}
-            >
-              <MaterialIcon name={tab.icon} className="text-[18px]" />
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-lg border border-outline-variant overflow-hidden shrink-0">
+            {(
+              [
+                { id: "companies" as const, label: "Companies", icon: "business" },
+                { id: "assistant" as const, label: "AI Assistant", icon: "smart_toy" },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setMainTab(tab.id)}
+                className={`inline-flex items-center gap-1.5 px-4 h-9 text-label-md font-bold transition-colors ${
+                  mainTab === tab.id
+                    ? "bg-primary-container text-on-primary"
+                    : "bg-white text-on-surface hover:bg-surface-container"
+                }`}
+              >
+                <MaterialIcon name={tab.icon} className="text-[18px]" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1 justify-end">
+            <div className="flex items-center gap-2 shrink-0">
+              <MaterialIcon name="bookmarks" className="text-secondary text-[18px]" />
+              <span className="font-label-md text-label-md font-bold text-on-surface">
+                My Shortlist ({shortlist.length}/3)
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 min-w-0">
+              {shortlist.length === 0 ? (
+                <span className="text-label-sm text-on-surface-variant">
+                  No companies shortlisted yet.
+                </span>
+              ) : (
+                shortlist.map((entry) => (
+                  <span
+                    key={entry.leadId}
+                    className="inline-flex items-center gap-1.5 h-8 pl-3 pr-1.5 rounded-full bg-secondary-container/30 text-on-surface text-label-sm font-bold border border-secondary/20"
+                  >
+                    {entry.companyName}
+                    <button
+                      type="button"
+                      disabled={removingLeadId === entry.leadId}
+                      onClick={() => void handleRemoveShortlist(entry)}
+                      className="w-6 h-6 rounded-full hover:bg-white/70 flex items-center justify-center text-on-surface-variant"
+                      aria-label={`Remove ${entry.companyName}`}
+                    >
+                      <MaterialIcon name="close" className="text-[14px]" />
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+            {onContinue ? (
+              <button
+                type="button"
+                disabled={!canContinue}
+                onClick={onContinue}
+                className={`h-9 px-4 rounded-lg font-bold text-label-md shrink-0 transition-colors ${
+                  canContinue
+                    ? "bg-primary-container text-on-primary hover:bg-primary"
+                    : "bg-surface-container-highest text-on-surface-variant/40 cursor-not-allowed"
+                }`}
+              >
+                Continue
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      {/* Documents tab — kept mounted so browse/selection state survives tab switches */}
+      {/* Companies tab — kept mounted so browse/selection state survives tab switches */}
       <div
         className={`flex flex-col lg:flex-row flex-1 min-h-0 ${
-          mainTab === "documents" ? "" : "hidden"
+          mainTab === "companies" ? "" : "hidden"
         }`}
       >
         {/* Left: company list */}
@@ -501,53 +551,6 @@ export function ProspectingDataRoom({
         }`}
       >
         <ProspectingDataRoomChat attemptId={attemptId} companies={companies} />
-      </div>
-
-      {/* Shortlist tray — always visible regardless of Documents / AI Assistant tab */}
-      <div className="border-t border-outline-variant bg-surface-container-lowest px-4 py-3 flex flex-wrap items-center gap-3 shrink-0">
-        <div className="flex items-center gap-2 shrink-0">
-          <MaterialIcon name="bookmarks" className="text-secondary text-[18px]" />
-          <span className="font-label-md text-label-md font-bold text-on-surface">
-            My Shortlist ({shortlist.length}/3)
-          </span>
-        </div>
-        <div className="flex-1 flex flex-wrap gap-2 min-w-0">
-          {shortlist.length === 0 ? (
-            <span className="text-label-sm text-on-surface-variant">No companies shortlisted yet.</span>
-          ) : (
-            shortlist.map((entry) => (
-              <span
-                key={entry.leadId}
-                className="inline-flex items-center gap-1.5 h-8 pl-3 pr-1.5 rounded-full bg-secondary-container/30 text-on-surface text-label-sm font-bold border border-secondary/20"
-              >
-                {entry.companyName}
-                <button
-                  type="button"
-                  disabled={removingLeadId === entry.leadId}
-                  onClick={() => void handleRemoveShortlist(entry)}
-                  className="w-6 h-6 rounded-full hover:bg-white/70 flex items-center justify-center text-on-surface-variant"
-                  aria-label={`Remove ${entry.companyName}`}
-                >
-                  <MaterialIcon name="close" className="text-[14px]" />
-                </button>
-              </span>
-            ))
-          )}
-        </div>
-        {onContinue ? (
-          <button
-            type="button"
-            disabled={!canContinue}
-            onClick={onContinue}
-            className={`h-9 px-4 rounded-lg font-bold text-label-md shrink-0 transition-colors ${
-              canContinue
-                ? "bg-primary-container text-on-primary hover:bg-primary"
-                : "bg-surface-container-highest text-on-surface-variant/40 cursor-not-allowed"
-            }`}
-          >
-            Continue
-          </button>
-        ) : null}
       </div>
 
       {formCompany ? (
