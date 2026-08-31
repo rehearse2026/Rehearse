@@ -29,11 +29,33 @@ export function ProspectingDataRoomChat({
   const [chatInput, setChatInput] = useState("");
   const [isAILoading, setIsAILoading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   const companyById = useMemo(() => {
     return new Map(companies.map((company) => [company.id, company]));
   }, [companies]);
+
+  const sortedCompanies = useMemo(() => {
+    return [...companies].sort((a, b) => a.name.localeCompare(b.name));
+  }, [companies]);
+
+  const filteredPickerCompanies = useMemo(() => {
+    const query = pickerSearch.trim().toLowerCase();
+    if (!query) {
+      return sortedCompanies;
+    }
+    return sortedCompanies.filter(
+      (company) =>
+        company.name.toLowerCase().includes(query) ||
+        company.industry.toLowerCase().includes(query)
+    );
+  }, [pickerSearch, sortedCompanies]);
+
+  const allSelected =
+    companies.length > 0 && attachedIds.length === companies.length;
 
   const attachedCompanies = useMemo(() => {
     return attachedIds
@@ -48,6 +70,29 @@ export function ProspectingDataRoomChat({
     }
     el.scrollTop = el.scrollHeight;
   }, [messages, isAILoading]);
+
+  useEffect(() => {
+    if (!isPickerOpen) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent): void => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        setIsPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isPickerOpen]);
+
+  const selectAllCompanies = (): void => {
+    setAttachedIds(companies.map((company) => company.id));
+    setSendError(null);
+  };
+
+  const clearAllCompanies = (): void => {
+    setAttachedIds([]);
+    setSendError(null);
+  };
 
   const toggleAttached = (companyId: string): void => {
     setAttachedIds((prev) =>
@@ -133,31 +178,98 @@ export function ProspectingDataRoomChat({
           </p>
         </div>
 
-        <div>
+        <div ref={pickerRef} className="relative">
           <p className="text-label-sm font-bold text-on-surface mb-2">Attach Documents</p>
-          <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto custom-scrollbar">
-            {companies.map((company) => {
-              const isAttached = attachedIds.includes(company.id);
-              return (
-                <button
-                  key={company.id}
-                  type="button"
-                  onClick={() => toggleAttached(company.id)}
-                  className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-label-sm font-bold border transition-colors ${
-                    isAttached
-                      ? "bg-primary-container text-on-primary border-primary-container"
-                      : "bg-white text-on-surface border-outline-variant hover:bg-surface-container"
-                  }`}
-                >
-                  <MaterialIcon
-                    name={isAttached ? "check_circle" : "add_circle"}
-                    className="text-[16px]"
-                  />
-                  {company.name}
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsPickerOpen((open) => {
+                  if (open) {
+                    setPickerSearch("");
+                  }
+                  return !open;
+                });
+              }}
+              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-outline-variant bg-white text-label-sm font-bold text-on-surface hover:bg-surface-container transition-colors min-w-[220px] justify-between"
+              aria-expanded={isPickerOpen}
+              aria-haspopup="listbox"
+            >
+              <span className="truncate">
+                {attachedIds.length === 0
+                  ? "Select companies…"
+                  : `${attachedIds.length} of ${companies.length} selected`}
+              </span>
+              <MaterialIcon
+                name={isPickerOpen ? "expand_less" : "expand_more"}
+                className="text-[18px] shrink-0"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={allSelected ? clearAllCompanies : selectAllCompanies}
+              disabled={companies.length === 0}
+              className="h-9 px-3 rounded-lg border border-outline-variant bg-white text-label-sm font-bold text-primary hover:bg-surface-container transition-colors disabled:opacity-40"
+            >
+              {allSelected ? "Clear all" : "Select all"}
+            </button>
           </div>
+
+          {isPickerOpen ? (
+            <div
+              className="absolute z-20 mt-1 w-full max-w-md rounded-lg border border-outline-variant bg-white shadow-lg overflow-hidden"
+              role="listbox"
+              aria-multiselectable="true"
+            >
+              <div className="p-2 border-b border-outline-variant bg-surface-container-lowest">
+                <div className="relative">
+                  <MaterialIcon
+                    name="search"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-[16px]"
+                  />
+                  <input
+                    type="text"
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder="Search companies…"
+                    className="w-full h-8 pl-8 pr-3 rounded-md border border-outline-variant bg-white text-sm outline-none focus:ring-2 focus:ring-secondary/50"
+                  />
+                </div>
+              </div>
+              <div className="max-h-56 overflow-y-auto custom-scrollbar">
+                {filteredPickerCompanies.length === 0 ? (
+                  <p className="px-3 py-4 text-label-sm text-on-surface-variant text-center">
+                    No matches.
+                  </p>
+                ) : (
+                  filteredPickerCompanies.map((company) => {
+                    const isAttached = attachedIds.includes(company.id);
+                    return (
+                      <label
+                        key={company.id}
+                        className="flex items-center gap-2.5 px-3 py-2 hover:bg-surface-container cursor-pointer border-b border-outline-variant/40 last:border-b-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isAttached}
+                          onChange={() => toggleAttached(company.id)}
+                          className="h-4 w-4 rounded border-outline-variant text-primary focus:ring-secondary"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-label-sm font-bold text-on-surface truncate">
+                            {company.name}
+                          </span>
+                          <span className="block text-[11px] text-on-surface-variant truncate">
+                            {company.industry} · {company.sizeLabel}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap gap-2 min-h-[32px]">
