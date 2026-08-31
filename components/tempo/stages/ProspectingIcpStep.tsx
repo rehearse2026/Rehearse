@@ -35,6 +35,7 @@ function FieldCounter({
   return (
     <div className="flex flex-nowrap items-center gap-sm shrink-0 whitespace-nowrap text-[11px] text-on-surface-variant font-medium">
       {belowMin ? <span>Min {minChars}</span> : null}
+      {belowMin ? <span aria-hidden="true">·</span> : null}
       <span>
         {value.length} / {maxLength}
       </span>
@@ -138,22 +139,22 @@ export function ProspectingIcpStep({
         </section>
 
         <section className="space-y-sm">
+          <label
+            className="font-bold text-label-md text-on-surface block"
+            htmlFor="icp-operational-signals"
+          >
+            Operational signals that predict fit
+          </label>
           <div className="flex justify-between items-center gap-md">
-            <label
-              className="font-bold text-label-md text-on-surface min-w-0"
-              htmlFor="icp-operational-signals"
-            >
-              Operational signals that predict fit
-            </label>
+            <p className="font-label-sm text-on-surface-variant min-w-0">
+              List observable signals you can verify during research, not generic intent.
+            </p>
             <FieldCounter
               value={state.icpOperationalSignals}
               maxLength={FIELD_MAX_LENGTH}
               minChars={ICP_MIN_OPERATIONAL_SIGNALS_CHARS}
             />
           </div>
-          <p className="font-label-sm text-on-surface-variant">
-            List observable signals you can verify during research, not generic intent.
-          </p>
           <textarea
             id="icp-operational-signals"
             rows={5}
